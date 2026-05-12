@@ -1,0 +1,15 @@
+# MHFU Modding Tools - Python Requirements
+
+# Cryptography (for mhef encryption/decryption)
+pycryptodome>=3.15.0
+
+# Image processing (for texture work)
+Pillow>=9.0.0
+
+# For ISO manipulation
+pycdlib>=1.12.0
+
+# General utilities
+numpy>=1.21.0
+
+# Optional: Blender addon dependencies handled by Blender itself
