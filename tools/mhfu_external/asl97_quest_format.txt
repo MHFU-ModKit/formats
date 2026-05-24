@@ -1,0 +1,130 @@
+# information gotten from using mhp2g custom quest editor
+# launch using `LANG="zh_CN" wine 'MHP2G_QE v0.80.exe'`
+
+# Note: psp is little-endian
+
+unknown stuff:
+failure condition > it seem to affect multiple bytes
+
+note:
+supplies data end with `00 00 64 ea`
+
+____
+
+First 8 bytes:
+salt > 4C 00 00 00
+magic number > 32 4E 44 47
+
+unknown bytes which change depending on length of data (after @0x80?)
+
+4 bytes @0x3c:
+guild point > 2 bytes
+null? > 2 bytes
+
+byte @0x44
+craving quality:
+    village > 00
+    low rank > 01
+    high rank > 02
+    treasure > 03
+    training > 04
+    g rank > 05
+
+byte @0x45
+start:
+    camp > 00
+    random > 01
+    special > 02
+
+byte @0x46
+supplies condition:
+    start > 00
+    random > 01
+    condition > 02 (todo: find out how to set condition)
+
+byte @0x4b
+minor strength: 1 byte (00-1f)
+
+4 bytes @0x4c
+quest type: (todo: find meaning of each)
+    kill minr: 01 00 00 00
+    kill boss: 01 40 00 00
+    gathering: 02 00 08 00
+    hunting: 04 40 00 00
+    kill many: 04 40 28 00
+    multi wyvrn:  04 40 40 00
+    special: 08 40 00 00
+    treasure: 10 40 00 00
+    (below are 'hidden' option)
+    hunt[other]: 04 00 00 00
+    kill[drge]: 81 40 00 00
+    spcl[drge] : 88 40 00 00
+
+Next x bytes@0x50:
+money > 2 bytes
+null > 2 bytes
+reward > 2 bytes
+null > 2 bytes
+deduction ko > 2 bytes
+null > 2 bytes
+time > 4 bytes, 1800 per min, (my guess: 1800 frame at 30fps*60second)
+
+bytes @0x64
+id > 2 bytes (0xea61-0xee47)
+
+byte @0x69
+join condition:
+    min hr2: 01
+    min hr3: 02
+    min hr4: 03
+    min hr5: 04
+    min hr6: 05
+    min hr7: 06
+    min hr8: 07
+    min hr9: 08
+    req GS: 09
+    req Lance: 0a
+    req Hammer: 0b
+    req SNS: 0c
+    req GL: 0d
+    req LS: 0e
+    req DS: 0f
+    req Bowgun: 10
+    req HH: 11
+    req Bow: 12
+    req no armor: 13
+    2 ppl without obj: 14
+    2 HR4+ ppl without obj: 15
+
+4 bytes @0x6b
+keep damage:
+    uncheck: 01 01 00 00
+    check: 00 04 80 01
+
+byte @0x4f and @0x66:
+star:
+    normal: 00 @0x4f:
+        @0x66
+        1: 01
+        2: 02
+        3: 03
+        4: 04
+        5: 05
+    high: 22 @0x4f:
+        @0x66
+        6: 06
+        7: 07
+        8: 08
+    g: 60 @0x4f:
+        @0x66
+        1:09
+        2:0a
+        3:0b
+
+data: 4 bytes chunk + min 4 free bytes
+    title > 28 char/bytes max?
+    success condition > 56 char/bytes max?
+    fail condition > 56 char/bytes max?
+    quest detail > 200 char/bytes max?
+    main monster > 56 char/bytes max?
+    client name > 28 char/bytes max?
