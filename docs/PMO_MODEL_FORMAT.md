@@ -88,12 +88,47 @@ all offsets before emitting, so it is a no-op on non-monster files).
 Verified: em01 = 19592 verts / 31 groups, em02 = 17037 verts / 23 groups,
 em01 secondary PMO = 682 verts / 7 groups — all clean.
 
-### Skinning: monsters are RIGID-bound (verified 2026-06-13)
+### Split-mesh PMOs: TWO mesh sets (verified 2026-06-17, file_06185 = Tigrex)
 
-**0 of 62** em01 vertex groups set the VTYPE weight bits → **no per-vertex blend
-weights**. Each vertex group is bound to a single bone (the engine sets that
-bone's matrix before drawing the group). `pmo.py` line ~82 now captures weights
-into `vertex['weights']` for the models that *do* use blend skinning.
+Some big-monster PMOs split their geometry into **two mesh sets**, and the
+`header[5]` mesh table only covers the FIRST set. The header has a second count
+and two extra table pointers that describe the rest:
+
+| Field | Offset (struct `I4f2H8I` @ pmo+8) | Meaning |
+|-------|-----------------------------------|---------|
+| `header[5]` | u16 @ pmo+0x1C | mesh count for **set A** (mesh table @ `header[7]`, stride 0x18) |
+| `header[6]` | u16 @ pmo+0x1E | mesh count for **set B** |
+| `header[9]` | u32 @ pmo+0x28 | **end of the vgroup table** (set-B index table @ this offset) |
+| `header[10]`| u32 @ pmo+0x2C | set-B mesh table (`(material, vgroup)` byte-pairs) |
+
+`file_06185` (the native-quest Tigrex): set A = 7 meshes → 23 vgroups (the
+**extremities** — tail/claws/head, ~370 verts); the **body** is in vgroups the
+set-A table never references. Walking only `header[5]` drops the body (why early
+imports showed only the extremities).
+
+**Robust rule:** the full vgroup table spans **`[header[8], header[9])`**, so
+`vgroup_count = (header[9] − header[8]) / 0x10`; enumerate ALL of them, not just
+the ones the mesh table indexes. `pmo.py::_append_unreferenced_vgroups` appends
+any vgroup the mesh-table walk missed (file_06185: 370 → **4128 verts**, full
+model). Single-set monsters (mesh table already covers every vgroup) are
+unaffected; all 49 big-mon PACs still round-trip byte-identical.
+
+### Skinning: small monsters RIGID, big monsters often SKINNED
+
+**0 of 62** em01 (small-monster) vertex groups set the VTYPE weight bits → **no
+per-vertex blend weights**; each group is rigid-bound to one bone. But big
+monsters CAN be skinned: `file_06185`'s 214 vgroups all carry blend weights
+(weight-count 1–8 per vertex, VTYPE weight bits set). `pmo.py` (`run_ge`)
+captures weights into `vertex['weights']` for the models that use blend skinning.
+
+### TMH textures + in-memory decode (2026-06-17)
+
+`mhfu_model/tmh.py::decode_tmh(raw)` decodes the TMH sub (PAC sub 2) to RGBA8 with
+**no PIL dependency** (ported from `mhff/psp/tmh.py`; modes 0–8 + CLUT, BGRA→RGBA
+swap; DXT3/5 modes 9/10 skipped). Byte-exact vs the PIL reference on all of
+`file_06185`'s 5 textures. The Blender importer turns each into a packed image +
+Principled material, **explicitly UV-mapped** (a `ShaderNodeUVMap` → the texture's
+`Vector` input; without it the texture falls back to generated coords and smears).
 
 > **"Rigid" means no per-vertex weights — NOT "no skeleton".** Monsters absolutely
 > have a full `Joint`/`Hierarchy` bone skeleton and animate it: the Tigrex overlay
@@ -235,6 +270,18 @@ final_position = raw_position / scale_divisor
    (see `docs/ANIMATION_FORMAT.md`).
 3. **Geometry import works** - `pmo.py` converts monster PMOs (both model parts) to
    OBJ; weights captured when present. Full rigged import blocked only by (1).
+4. **Topology editing — SOLVED (2026-06-18).** Reshape (move verts at constant
+   topology/size) = `tools/mhfu_model/pmo.py` in-place re-encode (byte-exact). ADDING
+   vertices/faces = `tools/mhfu_model/pmo_topology.py`: a byte-level rebuild of the
+   `geBase` GE-list region (the part from `header[12]` to EOF = per-vgroup
+   `[GE list .. RET] + [vertex buffer] + [index buffer]`, 16-byte aligned). It re-lays
+   the region, patches each list's `VADDR`/`IADDR` args + each vgroup record's
+   `I3=geoff/I4=vbuf/I5=ibuf` (geBase-relative), and bumps `header[0]`; tables before
+   `geBase` stay byte-identical. Grows within an existing vgroup (8-bit-index 256-vert/
+   group cap; a NEW vgroup has undefined bone binding). PROVEN live in-game: added
+   geometry renders (the engine's decode is data-driven). New verts currently inherit
+   vertex0's UV/normal/weights (polish TODO). Delivered live via the `framework/prx`
+   relocate-source path (`mhfu.inject_relocate`) — see CLAUDE.md Phase 5.
 
 ## Blender / Noesis Import (tooling, 2026-06-13)
 
