@@ -270,6 +270,18 @@ final_position = raw_position / scale_divisor
    (see `docs/ANIMATION_FORMAT.md`).
 3. **Geometry import works** - `pmo.py` converts monster PMOs (both model parts) to
    OBJ; weights captured when present. Full rigged import blocked only by (1).
+4. **Topology editing — SOLVED (2026-06-18).** Reshape (move verts at constant
+   topology/size) = `tools/mhfu_model/pmo.py` in-place re-encode (byte-exact). ADDING
+   vertices/faces = `tools/mhfu_model/pmo_topology.py`: a byte-level rebuild of the
+   `geBase` GE-list region (the part from `header[12]` to EOF = per-vgroup
+   `[GE list .. RET] + [vertex buffer] + [index buffer]`, 16-byte aligned). It re-lays
+   the region, patches each list's `VADDR`/`IADDR` args + each vgroup record's
+   `I3=geoff/I4=vbuf/I5=ibuf` (geBase-relative), and bumps `header[0]`; tables before
+   `geBase` stay byte-identical. Grows within an existing vgroup (8-bit-index 256-vert/
+   group cap; a NEW vgroup has undefined bone binding). PROVEN live in-game: added
+   geometry renders (the engine's decode is data-driven). New verts currently inherit
+   vertex0's UV/normal/weights (polish TODO). Delivered live via the `framework/prx`
+   relocate-source path (`mhfu.inject_relocate`) — see CLAUDE.md Phase 5.
 
 ## Blender / Noesis Import (tooling, 2026-06-13)
 
