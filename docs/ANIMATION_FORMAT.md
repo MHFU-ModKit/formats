@@ -447,6 +447,40 @@ Hypothesis: AHI = Animation/Hitbox Information
 The `em32.ahi` (Rajang) and `Head`/`Prog` notes below are retained as historical
 reference; the live monster-animation source is the per-PAC sub-resource 3, not these.
 
+## ⚠️ MHFU in-game (0x38) anim vs lobby (0x18) — RE'd 2026-06-19 (Brute port)
+
+`tools/anim.py`'s model (pack header `0x18`, slot table @`hsize-4`, bone records
+`{mask,nch,bsz}`, block header `0x14`) is the **MHP3rd / lobby** form. The **in-game**
+anim the engine actually plays (native Tigrex `file_06185` sub-3) is a DIFFERENT,
+RECURSIVE 3-stream form — decoded live via the per-frame interpolator chain
+`0x0885fa0c → 08863198 → 088630d0 → 08863668`. Critical for any cross-game port.
+
+- **Pack header = `0x38`** (not `0x18`): `magic 0x64, hsize 0x38`, then **five
+  `(0x64, suboffset)` pairs** @`+0x08..+0x2F`, `u32 0` @`+0x30`, then the **main
+  100-slot table @`0x34`**. The 5 sub-offsets point to **five contiguous 100-entry
+  u32 sub-tables** (`0x1C8/0x358/0x4E8/0x678/0x808`, each `0x190`, ending at the
+  first anim `0x998`). Empty entries/tables = `0xFFFFFFFF`.
+- **THREE parallel streams** populate three tables — main(@`0x34`), sub1(@`0x358`),
+  sub3(@`0x678`) — that **partition the skeleton's bones** (native Tigrex main block
+  `bc=31`, sub1 `bc=9`, sub3 `bc=5`; 31+9+5 ≈ bone count). Each animation = THREE
+  blocks (one/stream); tables 0/2/4 stay empty. Block tags carry `0x80000000`.
+- **Blocks are RECURSIVE sections** `{0x80000000|tag, u32 count, u32 size}` down to
+  keyframes (top anim block has extra `loop@+0xC`/`loop_start@+0x10`). The per-frame
+  interpolator `0x08863668` reads each keyframe section's FRAME-TIME `lh [sect+0xE]`,
+  compares to the current frame `f12`, and `[sect+4]` as a count.
+- **The per-frame tick requires the anim and skeleton to describe the SAME bones.**
+  Proven: unmodified native Tigrex anim + a Brute 46-bone skeleton crashes the
+  per-frame walker identically (`0x088636ac`, wild read) — the per-bone traversal
+  lands on a `loop_start` float used as an index. A ported monster's anim MUST be
+  authored in this format matching its OWN skeleton; you cannot scaffold with
+  another species' anim.
+
+**Implication:** a real cross-game anim port needs a **recursive in-game encoder**
+(nested `{0x80000000|tag,count,size}` sections + the 3 stream tables + 0x38 header),
+not `anim.py`'s flat form. A bind-pose = the same encoder with 1 keyframe/channel.
+`anim.py`'s encoder is correct only for byte-identical RESHAPE of an existing in-game
+pack, not for synthesis. Full write-up: `docs/BRUTE_TIGREX_PORT.md`.
+
 ## References
 
 - Skeleton (iOS, same format): `m2jean/mhfu-ios-pmo-plugin`
