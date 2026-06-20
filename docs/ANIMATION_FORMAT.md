@@ -477,9 +477,32 @@ RECURSIVE 3-stream form — decoded live via the per-frame interpolator chain
 
 **Implication:** a real cross-game anim port needs a **recursive in-game encoder**
 (nested `{0x80000000|tag,count,size}` sections + the 3 stream tables + 0x38 header),
-not `anim.py`'s flat form. A bind-pose = the same encoder with 1 keyframe/channel.
-`anim.py`'s encoder is correct only for byte-identical RESHAPE of an existing in-game
-pack, not for synthesis. Full write-up: `docs/BRUTE_TIGREX_PORT.md`.
+not `anim.py`'s flat form. `anim.py`'s encoder is correct only for byte-identical
+RESHAPE of an existing in-game pack, not for synthesis.
+
+### ✅ in-game encoder BUILT — `tools/mhfu_model/anim_ingame.py` (2026-06-19)
+
+`anim_ingame.py` is that recursive encoder: `parse_ingame`/`encode_ingame` round-trip
+native `file_06185` sub[3] BYTE-EXACT (1008288 B); `from_flat_anim` converts a flat
+(lobby/MHP3rd) pack → the 3-stream in-game form; `make_static_pose`/`rest_bone` build
+bind/rest poses. Tests: `tools/mhfu_model/tests/test_anim_ingame.py` (5 pass). Wired into
+the Blender addon (`blender_mhfu/exporter.export_ingame_bindpose_pac` + operator
+`EXPORT_OT_mhfu_monster_ingame`).
+
+**Two hard engine rules, both PROVEN LIVE (Brute port, see `docs/BRUTE_TIGREX_PORT.md`):**
+1. **NO scale channels.** The per-frame FK (`0x08863198`) reads each channel's ctype
+   low-u16 as a bit and indexes table `0x089A5C44`, which maps ONLY rotation
+   (0x08/0x10/0x20 → 3/4/5) + location (0x40/0x80/0x100 → 6/7/8). Scale bits
+   (0x200/0x400/0x800) index OOB → garbage joint ptr → crash (`Write @0x0D8C59B0, PC
+   0x08863250`). Native Tigrex anims never carry scale; `from_flat_anim` drops bits ≥0x200.
+2. **The bone partition must match the HOST**, not the injected skeleton. When hosting on
+   the Tigrex slot the engine iterates `entity+0x1a4` = **45** bones (split 31/9/5); a
+   42-bone anim runs the joint walk off the end → junk keyframe ptr → crash (`Read
+   @f3e9dc32, PC 0x088630d0`, the keyframe interpolator).
+3. A bind/static pose with EMPTY bone sections COLLAPSES the mesh (joints not computed) —
+   every bone needs real keyframes; skeleton `bind_rot` is all-zeros (rotation is anim-only).
+
+Full debugging arc + key addresses: `docs/BRUTE_TIGREX_PORT.md`.
 
 ## References
 
