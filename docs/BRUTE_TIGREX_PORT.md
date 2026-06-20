@@ -1,4 +1,4 @@
-# Brute Tigrex live port — integration RE & status (2026-06-19)
+# Brute Tigrex live port — integration RE & status (2026-06-21)
 
 Branch `mhp3rd-monster-port`. Goal: port **Brute Tigrex** from MHP3rd into MHFU
 (his own model + skeleton + animation), running live in a Giadrome quest.
@@ -21,22 +21,35 @@ is in `docs/ANIMATION_FORMAT.md` ("MHFU in-game (0x38) anim — RE'd 2026-06-19"
 | **Loads with NO crash** | ✅ v25 (2026-06-20) — past all construction + FK crashes |
 | **Draw node + engage + un-cull** | ✅ when player co-located: `+0x008` built, `+0x004` skip-draw clear, `+0x5dc`=1.0 |
 | **Model + bones + textures RENDER in-game** | ✅ **v29 (2026-06-20) — complete TEXTURED Brute renders live, no crash** |
-| **Mesh POSES correctly (articulated)** | ⚠️ distorted (limbs splayed) — PSP bone-matrix-palette skinning retarget remaining |
+| **Mesh ASSEMBLES (static bind pose)** | ✅ **v32 — model-space verts + per-group nearest-bone → recognizable assembled Brute** |
+| **Bone matcher + anim bone_map + Blender export** | ✅ `tools/mhfu_model/bone_match.py` + `from_flat_anim(bone_map=)` + exporter (commit c72db28, 70 tests) |
+| **Real-motion animation (coherent)** | ❌ tears under animation — the Brute mesh uses per-vertex BLEND skinning (see below) |
 
-The model + skeleton + textures convert, load, and **as of v29 RENDER LIVE in a
-quest** — a complete, textured Brute Tigrex (no crash, no collapse). The
-collapse/crash earlier was NOT an anim problem: the converted PMO was in the **0x20
-"player" mesh-table format** while the engine's monster loader needs the **0x18
-"monster" format** (different mesh-record layout + the `+0x14` field = a vgroup-table
-index, not vertices; bonerefs must point at real skeleton bones). v25/v26/v27
-collapsed (engine read count=0, bound no geometry); v28 (0x18 fix) crashed because
-`+0x14` carried a cumulative *vertex* count (≤2862) → OOB vgroup read → garbage
-pointer; **v29 set `+0x14`=(vgroup_idx<<16)|count → the model renders.** The
-**remaining** distortion is the PSP **bone-matrix-palette** skinning: each vgroup has
-a small bone palette + per-vertex weights; our converter bound everything to the root
-bone, so verts pull to wrong bones (spiky limbs). The cross-game skinning retarget =
-carry each vgroup's real MHP3rd bone palette through to the 0x18 PMO. Live-debug arc
-below; root-cause detail in memory `brute-port-ingame-anim-encoder`.
+**The model + bones + textures RENDER live** as an assembled, recognizable, textured
+Brute Tigrex (v32). The long-standing collapse/crash was NOT an anim problem — it was
+the PMO **mesh-table format**: the converter emitted the **0x20 "player" layout** but
+the engine's monster loader needs the **0x18 "monster" layout** (`+0x14` = a
+vgroup-table index, not vertices; vg[2] = a real skeleton bone). v25/v26/v27 collapsed
+(engine read count=0 → no geometry); v28 (0x18) crashed (`+0x14` carried a cumulative
+*vertex* count ≤2862 → OOB vgroup read); **v29 fixed `+0x14`=(vgroup_idx<<16)|count →
+renders.** Skinning then resolved for a *static* pose (v30 flat→v31 bone-local crunch→
+**v32 model-space verts + nearest-bone = assembled**, after proving native verts are
+model-space + bind-inverse skinning).
+
+**The remaining wall is the ANIMATION, and the root cause is now definitive: the Brute
+mesh uses TRUE per-vertex BLEND skinning** — 58/88 vgroups are multi-bone (verts in one
+group weighted to *different* bones) and **30.9% of weights are fractional blends**.
+MHFU native monsters are **rigid, one-bone-per-group**. v32 forced every vertex to a
+single bone (slot 0) → assembles statically (at bind all bones are home) but **tears the
+moment bones animate** (a vertex that should blend several moving bones rigidly follows
+one → pieces separate → GE hang). The MHP3rd v102 PMO stores the bone NOT in vg[2]
+(all 0) but in per-vertex weights + a per-vgroup **bone-matrix palette** set by GE
+display-list bone commands. So the generalizable remaining fix = **port the per-vertex
+skinning** (preserve blend weights + emit each vgroup's bone-matrix palette, mapping
+source→MHFU bone via the matcher) OR **split multi-bone groups into per-bone rigid
+sub-groups** (native's approach — coarser, reuses the rigid path). The bone matcher is
+built and feeds either. Full arc + addresses below; detail in memory
+`brute-port-ingame-anim-encoder`.
 
 ## v22→v25: crash ladder to LOAD, then the mesh-collapse wall (2026-06-20)
 
@@ -248,25 +261,41 @@ DONE 2026-06-20 (the COLLAPSE was a PMO-FORMAT bug, not anim):
   monster, no crash). v28 crashed because `+0x14` carried a cumulative *vertex* count
   (≤2862) → OOB vgroup read; v29 fixed it to the vgroup index.
 
-REMAINING (skinning articulation — the model renders, the pose is being dialed in):
-1. **Distortion = PSP bone-matrix-palette skinning.** Each vgroup has a small bone palette +
-   per-vertex weights selecting within it. Findings (all live):
-   - v29 (verts on their original palette slot, all vg[2]=root) → spiky 3D.
-   - v30 (all verts forced to slot 0 = root) → FLATTENED billboard (bone 0's matrix is
-     rank-deficient/root is not a geometry bone).
-   - ⇒ each vgroup must bind to its OWN anatomical bone, and (rest-pose distortion proves the
-     engine uses **direct joint matrices, not bind-inverse**) the verts must be **bone-LOCAL**
-     (model_pos − bone_bind_world).
-2. **v31 (current, awaiting test):** per-group `vg[2]` = nearest skeleton bone (group centroid →
-   nearest bind-world bone; 88 groups → 34 bones), verts converted to bone-local, weights on
-   slot 0. If it assembles → rigid skinning works (then refine per-bone splits / use real MHP3rd
-   palette for multi-bone groups). If it scatters → the bind transform has rotation (not just
-   translation) and bone-local must use the full bind matrix. NOTE: v31 can ONLY be validated
-   in-game (offline render_check can't apply bone transforms — bone-local verts look collapsed
-   offline but assemble in-engine).
-3. Real MHP3rd per-vgroup palette (v102 `file_04898` sub0) is the ground-truth source; the
-   converter now captures `vg[2]` (`MeshGroup.boneref`, `pmo_p3rd.py`) but the v102 companion-geo
-   parse needs fixing (returns 0 groups). Nearest-bone (v31) is the geometry-derived stand-in.
+DONE 2026-06-21 (static skinning solved; animation root cause pinned; matcher built):
+- ✅ **Skinning math RE'd** — native verts are MODEL-SPACE (g5 verts x710 ≈ bone8 world x650;
+  g0 verts z574 bound to root@origin), so the engine uses **bind-inverse** skinning (at rest all
+  bone matrices ≈ identity → model-space verts render in place). Versions: v29 spiky → v30 (all
+  slot0=root) FLAT (root matrix rank-deficient) → v31 (bone-LOCAL verts) CRUNCHED (bone-local was
+  the wrong direction given bind-inverse) → **v32 (model-space verts + per-group nearest-bone vg[2]
+  + weights slot 0) = ASSEMBLED, recognizable Brute** (bind pose; the "lying flat/splayed" is just
+  the rest pose — vert bbox matches native exactly X1686/Y487/Z1398, so NOT a coordinate bug).
+- ✅ **Bone matcher + anim bone_map + Blender export built** (commit c72db28, 70 tests):
+  `tools/mhfu_model/bone_match.py` `match_skeletons()` (bind-position + tree-depth, cycle-guarded);
+  `from_flat_anim(bone_map=)` / `swap_anim_to_realmotion(bone_map=)`; exporter `src_skeleton_pac`.
+- ✅ **Animation root cause = per-vertex BLEND skinning** (DEFINITIVE). Real-motion anim (v33/v34)
+  tears regardless of stream-id alignment; v36 (rotation-only) still tears but only single-bone
+  groups (head/claws) move. Offline cross-ref: nearest-bone bound body groups to bones with
+  mismatched motion (group53 146v→bone41 motion 259; group86 136v→bone43 motion 0). WHY: the
+  original Brute mesh has **58/88 multi-bone vgroups + 30.9% fractional weights** (true blend
+  skinning); v32 forced one-bone rigid → static-OK, animated-tear. MHP3rd v102 vg[2] is all-0
+  (bone is in the per-vertex weights + a GE bone-matrix palette, NOT vg[2]).
+
+REMAINING (the animation — port the per-vertex skinning; generalizable, well-defined):
+1. **Option A (faithful):** parse each MHP3rd vgroup's bone-matrix PALETTE from its GE display list
+   (run_ge currently captures weights but NOT the palette — add bone-matrix command handling),
+   preserve the per-vertex blend weights, emit MHFU vgroups with the mapped palette (source bone →
+   MHFU bone via the matcher).
+2. **Option B (simpler, recommended first):** split each multi-bone vgroup into per-bone rigid
+   sub-groups (assign each vertex to its dominant-weight bone, split, rigid-bind each piece with
+   weight slot 0 + vg[2]=that bone). Native's own granularity; reuses the working rigid path + the
+   matcher; loses blend smoothness but gets coherent animation. Each vertex's bone still needs the
+   GE palette to resolve which bone a weight slot means.
+3. Either way the per-vgroup **bone-matrix palette** must be extracted from the source GE list —
+   that is the one missing parser piece. The matcher (built) handles source→MHFU bone indices.
+
+NOTE: tried using the native Tigrex anim on the Brute (v35) — coherent motion but it's a FAKE
+(only works because Brute is Tigrex-family; doesn't generalize). Rejected per the goal (support
+the monster as-is). v32 (assembled rigid bind pose) is the stable shippable milestone.
 
 OPERATIONAL: `.orig` sibling required for the inject to fire. The model renders now, so the
 render-fix (`brute_tigrex.lua` HOME_AREA=100) is safe to leave on for skinning iteration.
