@@ -235,21 +235,41 @@ DONE this session:
 - ✅ confirmed (corrected) the draw node DOES build + engage + un-cull work when co-located.
 - ✅ reliable event-driven breakpoint catcher `src/ppsspp_debug/catch_bp.py`.
 
-REMAINING (the deep wall — cross-game skinning/rig retarget):
-1. **The Brute mesh does not POSE** — it collapses (shadow + extensions) and drawing it hangs the
-   GE. Next clean test (game-stable, render-fix OFF so he stays culled): BP `0x088640f8` while the
-   Brute is CULLED to settle whether the per-frame big-mon anim chain (`0x09AC51A0`→`0x088640f8`)
-   runs for him at all (the in-window 0-hit was ambiguous — GE was likely already hung).
-   - If it runs → the collapse is a SKINNING/POSE data issue: the converted PMO vgroup→bone
-     assignments don't match the converted skeleton's bone matrices (compare a native skin).
-   - If it doesn't run → the overlay's per-frame anim dispatch skips the injected monster
-     (activation gate) — find what flags/state the native has that ours lacks.
-2. The skinning retarget itself (vgroup↔bone correspondence MHP3rd→MHFU) is likely manual
-   per-monster 3D work, as the porting research flagged.
+DONE 2026-06-20 (the COLLAPSE was a PMO-FORMAT bug, not anim):
+- ✅ **Root cause of the collapse FOUND** — the converted PMO used the **0x20 "player"
+  mesh-table format**; the engine's monster loader needs the **0x18 "monster" format**.
+  v26 (identity-rotation rest-pose) still collapsing PROVED the anim/skeleton were red herrings.
+- ✅ **0x18 monster mesh-record format fully RE'd** from native `file_06185`:
+  `<2f I I 2H I>` = scale(1,1), `+0x08`=`0x80000000|vtype`(3 common, 6/7 textured),
+  `+0x0C`=0 (or material-flag on textured meshes), `count`/`start` u16 @+0x10/+0x12,
+  `+0x14`=`(cumulative_vgroup_index<<16)|vgroup_count`. Vgroup `2BH3I`: vg[0]=mat,
+  vg[1]=unk, **vg[2]=skeleton bone (palette base)**, vg[3..5]=geoff/vbuf/ibuf (rel ge_base).
+- ✅ **v29 — the Brute model + bones + textures RENDER LIVE in-game** (complete textured
+  monster, no crash). v28 crashed because `+0x14` carried a cumulative *vertex* count
+  (≤2862) → OOB vgroup read; v29 fixed it to the vgroup index.
 
-OPERATIONAL: keep the Brute CULLED (`brute_tigrex.lua` HOME_AREA disabled) so the game stays
-playable; only un-cull once the mesh poses (else GE hang). `.orig` sibling required for the inject
-to fire.
+REMAINING (skinning articulation — the model renders, the pose is being dialed in):
+1. **Distortion = PSP bone-matrix-palette skinning.** Each vgroup has a small bone palette +
+   per-vertex weights selecting within it. Findings (all live):
+   - v29 (verts on their original palette slot, all vg[2]=root) → spiky 3D.
+   - v30 (all verts forced to slot 0 = root) → FLATTENED billboard (bone 0's matrix is
+     rank-deficient/root is not a geometry bone).
+   - ⇒ each vgroup must bind to its OWN anatomical bone, and (rest-pose distortion proves the
+     engine uses **direct joint matrices, not bind-inverse**) the verts must be **bone-LOCAL**
+     (model_pos − bone_bind_world).
+2. **v31 (current, awaiting test):** per-group `vg[2]` = nearest skeleton bone (group centroid →
+   nearest bind-world bone; 88 groups → 34 bones), verts converted to bone-local, weights on
+   slot 0. If it assembles → rigid skinning works (then refine per-bone splits / use real MHP3rd
+   palette for multi-bone groups). If it scatters → the bind transform has rotation (not just
+   translation) and bone-local must use the full bind matrix. NOTE: v31 can ONLY be validated
+   in-game (offline render_check can't apply bone transforms — bone-local verts look collapsed
+   offline but assemble in-engine).
+3. Real MHP3rd per-vgroup palette (v102 `file_04898` sub0) is the ground-truth source; the
+   converter now captures `vg[2]` (`MeshGroup.boneref`, `pmo_p3rd.py`) but the v102 companion-geo
+   parse needs fixing (returns 0 groups). Nearest-bone (v31) is the geometry-derived stand-in.
+
+OPERATIONAL: `.orig` sibling required for the inject to fire. The model renders now, so the
+render-fix (`brute_tigrex.lua` HOME_AREA=100) is safe to leave on for skinning iteration.
 
 ## Key addresses (live RE, MHFU EU)
 
