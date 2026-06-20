@@ -20,18 +20,23 @@ is in `docs/ANIMATION_FORMAT.md` ("MHFU in-game (0x38) anim — RE'd 2026-06-19"
 | **Blender addon emits .bin** | ✅ operator + headless test (`export_ingame_bindpose_pac`) |
 | **Loads with NO crash** | ✅ v25 (2026-06-20) — past all construction + FK crashes |
 | **Draw node + engage + un-cull** | ✅ when player co-located: `+0x008` built, `+0x004` skip-draw clear, `+0x5dc`=1.0 |
-| **Mesh renders POSED** | ❌ collapses (shadow + a few extensions) → degenerate-mesh draw HANGS the GE (dark screen) |
+| **Model + bones + textures RENDER in-game** | ✅ **v29 (2026-06-20) — complete TEXTURED Brute renders live, no crash** |
+| **Mesh POSES correctly (articulated)** | ⚠️ distorted (limbs splayed) — PSP bone-matrix-palette skinning retarget remaining |
 
-The model + skeleton + textures convert, and v25 makes the engine **load,
-construct, build the render draw node, un-cull, and engage** the injected Brute in
-a live quest with zero crashes. The recursive in-game anim format is fully RE'd
-(`docs/ANIMATION_FORMAT.md`) and the encoder (`anim_ingame.py`) round-trips native
-`file_06185` byte-exact. **The remaining wall is that the converted Brute mesh does
-not POSE correctly in-engine — it collapses, and drawing the degenerate mesh hangs
-the GE.** This is a cross-game skinning/rig issue (the MHP3rd→MHFU asset conversion
-is structurally valid enough to load + construct, but not to pose), the manual
-per-monster retarget the porting research flagged from the start. Live-debug arc
-(crash causes → the v25 load → the mesh-collapse wall) below.
+The model + skeleton + textures convert, load, and **as of v29 RENDER LIVE in a
+quest** — a complete, textured Brute Tigrex (no crash, no collapse). The
+collapse/crash earlier was NOT an anim problem: the converted PMO was in the **0x20
+"player" mesh-table format** while the engine's monster loader needs the **0x18
+"monster" format** (different mesh-record layout + the `+0x14` field = a vgroup-table
+index, not vertices; bonerefs must point at real skeleton bones). v25/v26/v27
+collapsed (engine read count=0, bound no geometry); v28 (0x18 fix) crashed because
+`+0x14` carried a cumulative *vertex* count (≤2862) → OOB vgroup read → garbage
+pointer; **v29 set `+0x14`=(vgroup_idx<<16)|count → the model renders.** The
+**remaining** distortion is the PSP **bone-matrix-palette** skinning: each vgroup has
+a small bone palette + per-vertex weights; our converter bound everything to the root
+bone, so verts pull to wrong bones (spiky limbs). The cross-game skinning retarget =
+carry each vgroup's real MHP3rd bone palette through to the 0x18 PMO. Live-debug arc
+below; root-cause detail in memory `brute-port-ingame-anim-encoder`.
 
 ## v22→v25: crash ladder to LOAD, then the mesh-collapse wall (2026-06-20)
 
