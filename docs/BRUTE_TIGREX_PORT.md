@@ -338,3 +338,48 @@ render-fix (`brute_tigrex.lua` HOME_AREA=100) is safe to leave on for skinning i
 - `framework/prx/mods/brute_port/mod.cpp` — pure-C swap+inject (superseded by the Lua mod).
 - `tools/mhfu_model/{pmo_p3rd,skeleton_p3rd}.py`, `tools/mhp3rd/scan_monster_pacs.py` — converters.
 - 6★ unlock to reach Tigrex quests: `tmp/unlock_ranks.py` (flag `0x2BC1` = `save_obj+0x445C` bit4).
+
+---
+
+## 2026-06-21 — BRUTE RENDERS + ANIMATES (textured, recognizable). Skinning solved via blend encoder.
+
+The Brute now renders as a recognizable, textured, **animated** Brute Tigrex in-game (red back
+spikes, tiger-stripe carapace, 4 legs, wings, tail), deforming under the native Tigrex animation;
+only the tail still scrambles.
+
+**Major correction — MHFU monsters are NATIVELY BLEND-SKINNED.** The vgroup field previously called
+`vg[2]=boneref` is `cumulativeBoneCount`. The real bone palette is the PMO `skeleton` section
+(header field 10) = `Weight{slot:u8, bone:u8}[]`, a *running-aux* state machine: walking vgroups in
+index order, each consumes its `boneCount` entries patching `aux[slot]=bone` (persists across
+vgroups); each vertex blends `aux[0..numweights-1]` by its VTYPE weights. Native Tigrex `file_06185`
+uses up to 8 bones/vgroup. The earlier "MHFU is rigid one-bone-per-group" and "per-vertex-blend wall"
+are **retracted**.
+
+**`tools/mhfu_model/pmo_skin.py` (blend skinning reader + encoder, 75 tests):**
+- `read(blob)` — resolves per-vertex `(bone, weight)` via the running palette.
+- `encode(SkinModel)` — re-serialises to a native monster PMO. **Byte-faithful round-trip of the
+  native Tigrex** (214 vgroups / 4128 verts / 2919 faces, 0.0 position+weight error, winding kept).
+- `build(scale, vgroups, materials)` — from-scratch monster PMO (generated mesh/material tables).
+- `auto_skin(mesh_groups, bone_world, nb=3)` — **derive** smooth blend weights (each vertex → its
+  `nb` nearest skeleton bones, inverse-distance; per-vgroup palette capped at PSP's 8). For ported
+  rigid-piece sources that have no weights.
+
+**The Brute port (shipped, v44):** clean v32 geometry + **native Tigrex tiger-stripe textures** +
+**`auto_skin` nearest-3-bone blend** to the native Tigrex skeleton, injected in-place over
+`file_06185`, driven by the native Tigrex skel+anim. v37 (rigid one-bone) splayed the wings at the
+roar peak; **v44 (auto-blend, avg 5.6 bones/vgroup) is "way less torn apart"** — the payoff of the
+blend encoder. Remaining: the tail scrambles (long bone chain; nearest-N grabs non-chain bones).
+
+**Texture:** `file_04898`'s OWN textures are lava-orange (tex7) + grey rock (tex1/4) — NOT the brown
+tiger-stripe Brute. The native Tigrex atlas IS that look (Brute is a Tigrex subspecies), so the port
+uses the native Tigrex textures. (`pmo_p3rd` material→texID also corrected: add the per-mesh
+`cumulativeMaterialCount`.) Decode TMH with `tools/mhfu_model/tmh.decode_tmh`.
+
+**OPEN — raw v102 geometry import.** `pmo_p3rd` over-expands v102 strips (34087 garbage verts / flat
+sheets vs the clean 2862) — v102 strips re-index a SHARED per-group vertex pool, which `pmo.run_ge`
+mishandles. AsteriskAmpersand's **PMO-Importer** parses verts correctly (5221, coherent) but its
+per-mesh scale/position **assembly** isn't yet cracked (global & per-mesh scale both jumble in
+replication). The clean `brute_tigrex_v32_modelspace.bin` geometry came from an unknown earlier
+tool and is NOT reproducible from raw `file_04898`+`file_04899` yet. This blocks (a) a rendered
+catalog of MHP3rd big monsters and (b) an authentic source-geometry rebuild in the Blender addon.
+Self-contained v102 PMO = `pmo_sub + companion` (companion at `ge_base == len(pmo_sub)`).
