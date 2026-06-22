@@ -121,6 +121,49 @@ monsters CAN be skinned: `file_06185`'s 214 vgroups all carry blend weights
 (weight-count 1–8 per vertex, VTYPE weight bits set). `pmo.py` (`run_ge`)
 captures weights into `vertex['weights']` for the models that use blend skinning.
 
+### MHP3rd v102 geometry parse + cross-game skinning (porter, 2026-06-22)
+
+**v102 GE-list walker — `pmo_p3rd.run_ge_v102`.** MHP3rd `102` PMOs encode geometry as
+PSP GE display lists that **address vertices THROUGH an index buffer and dedup by
+address** (tristrips share verts). The MHFU `1.0` walker (`pmo.run_ge`) read vertices
+flat/sequentially → it over-expanded a v102 mesh to ~34k garbage verts. `run_ge_v102`
+(ported faithfully from AsteriskAmpersand's PMO-Importer `build_prim`) walks
+`VADDR/IADDR/VTYPE/PRIM/RET`, reads the per-`PRIM` index buffer, fetches each vertex at
+`base + vertex_address + index*stride`, dedups, and builds tristrip faces with the
+`FFACE` winding flip. Correct VTYPE decode too: **4-bit `weightCount` (bits 14-18)** +
+**`bypass` bit (23)** for normalized/raw scaling, plus the exact field sizes (int16 pad on
+8-bit UV; trailing `w` on 8/16-bit normals). Result on the Brute (`file_05248` + companion
+`file_05249`): clean **2689 verts / 2973 faces**. Geometry is often in a **companion file**
+(`ge_base >= pmo size` → read GE from `file_<model+1>`); `pmo_p3rd.parse(pmo, geo_blob=)`.
+
+**Cross-game skinning — `pmo_skin.auto_skin`.** MHP3rd monsters ship as **rigid pieces
+with NO per-vertex weights** (all vgroups weightCount=0; bound engine-side). To deform
+under an MHFU host skeleton we DERIVE blend skinning. `auto_skin(mesh_groups, bone_world,
+parents=, …)` weights each vertex to nearby bones with these controls (all proven on the
+Brute):
+- `segment=True` (default): **bone-SEGMENT distance** (distance to the bone's line from its
+  parent, not the joint) — keeps a chest vertex on the spine instead of the euclidean-near
+  wing-root joint (fixes 679u stretch flaps).
+- `parents=`+`hops`: **chain-aware** — a vertex blends only bones within `hops` tree edges
+  of its nearest bone (a tail vert blends adjacent tail joints, not a leg bone).
+- `region_lock` (default): confine a whole source vgroup (= one rigid body part) to its
+  dominant bone's neighborhood.
+- `exclude=`: drop host joints the anim leaves at rest (so geometry never pins to an
+  un-rotating joint → the tail kink). `bone_match.fill_unmatched` handles a host chain
+  LONGER than the source (Tigrex tail 5 joints vs Brute 4): an unmatched joint inherits a
+  neighbour's source instead of compounding rotation on the shared one.
+The native blend-skinning encoder is `pmo_skin.encode`/`build` (running bone-palette +
+per-vertex weights; byte-exact round-trip of the native Tigrex `file_06185`).
+
+**The porter — `port_p3rd.port_monster` (CLI `tools/build_p3rd_port.py`, Blender operator
+"Port MHP3rd Monster" / `exporter.port_p3rd_monster_pac`, byte-identical).** Splices an
+MHP3rd monster onto an MHFU host frame (e.g. the Tigrex `file_06185`): its v102 geometry
+chain-aware-skinned onto the host `0xC0000000` skeleton + its OWN textures + its OWN moveset
+(see `docs/ANIMATION_FORMAT.md`). Generalized for the Tigrex-family; first port = the
+authentic Brute Tigrex (`file_05248`/`05250`). One OPEN visual issue is placement, not the
+model: a swap-spawned monster's world Y is engine-pinned to a ground target of 0 (it isn't
+terrain-registered) → it sinks; see `docs/agent_memory_map.md` `+0x200`.
+
 ### TMH textures + in-memory decode (2026-06-17)
 
 `mhfu_model/tmh.py::decode_tmh(raw)` decodes the TMH sub (PAC sub 2) to RGBA8 with

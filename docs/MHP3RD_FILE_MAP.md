@@ -34,7 +34,7 @@ exist; use the module constant `mhef.psp.MHP3_JP` (=6).
 | PMO geometry | magic `pmo\0` ver `1.0\0` | magic `pmo\0` ver **`102\0`** (per-mesh scale, diff normals) |
 | Skeleton | sub-0 magic **`0xC0000000`**, bone_count@+4 | magic **`0x80000000`**, bone_count@+4 (same blob family, diff top-bit) |
 | Texture | `.TMH0.14` | `.TMH0.14` (same) |
-| Animation | sub-3, magic `0x64`/hdr `0x18` | **NOT in the model PAC** `[OPEN]` — no `0x64` magic anywhere; gen-3 relocates/reformats anim |
+| Animation | sub-3, magic `0x64`/hdr `0x18` | `[RESOLVED 2026-06-22]` in-quest movesets are **separate raw `.anim` files** (`file_03997`–`04016` small/medium; `file_05142`–`05424` big monsters; Brute = `file_05250`, 77 clips). Same recursive data as MHFU, compact `u16` headers, variable header size. Parser `anim.parse_p3rd`; see `docs/ANIMATION_FORMAT.md`. |
 | Container | `[skel,pmo,tmh,anim]` 4-sub | **multi-sub (12–13)** w/ gen-3 FourCC tags `NSP\0`(0x0050534e) `ASB\0` `ARV\0`, **dual PMO + dual TMH** |
 
 ## Monster model PACs (located)

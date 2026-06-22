@@ -158,6 +158,15 @@ The mhff TMH parser outputs:
 python -m mhff.psp.tmh extract input.tmh output_dir/
 ```
 
+## MHP3rd ↔ MHFU compatibility (2026-06-22)
+
+**MHP3rd `.TMH` is byte-format-identical to MHFU `.TMH`** — same `.TMH`/`0.14` header and
+texture-table layout (verified: the Brute `file_05248` sub2 and the native Tigrex
+`file_06185` sub2 both decode to 5 textures of identical dimensions). So a ported MHP3rd
+monster's own texture atlas can be **spliced directly** into an MHFU host PAC's TMH slot
+with no conversion — exactly what the porter (`port_p3rd.port_monster`) does (the Brute keeps
+his own brown tiger-stripe atlas in-game). `mhfu_model/tmh.py::decode_tmh` decodes both.
+
 ## Known Limitations
 
 1. DXT3 and DXT5 decompression not implemented

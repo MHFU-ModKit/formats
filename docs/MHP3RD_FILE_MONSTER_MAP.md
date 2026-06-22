@@ -1,8 +1,9 @@
 # MHP3rd big-monster file → species map (visually identified 2026-06-22)
 
-Identified from headless model renders (`blender_mhfu/render_p3rd.py`, geometry is a bit
-noisy — the v102 strip parser over-expands — but colour + silhouette are clear) plus
-skeleton bind-pose matching to the MHFU Tigrex skeleton (`file_06185`). Renders +
+Identified from headless model renders (`blender_mhfu/render_p3rd.py`) plus skeleton
+bind-pose matching to the MHFU Tigrex skeleton (`file_06185`). (These renders were made
+with the OLD v102 walker that over-expanded strips; the parser is now FIXED —
+`pmo_p3rd.run_ge_v102`, see `docs/PMO_MODEL_FORMAT.md` — so re-renders are clean.) Renders +
 texture atlases are in `tmp/mhp3rd_monster_renders/` (gitignored).
 
 ## In-quest big-monster layout (per monster, 5 consecutive files)

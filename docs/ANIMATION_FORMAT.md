@@ -136,6 +136,40 @@ a sample rotation channel runs frames 0→39→77→113→150 with values ≈ �
 tangents present. ⇒ 1:1 anim↔skeleton bone mapping; the pack holds up to 100 animation
 slots (22 used on Tigrex), each an action (idle / walk / roar / …).
 
+### ✅ MHP3rd SOURCE anim (`parse_p3rd`) + cross-game port (2026-06-21/22)
+
+The MHP3rd in-quest moveset is the **same recursive data** as the MHFU `0x64` pack but with
+**compact `u16` bone/channel headers** (cross-checked byte-for-byte against
+AsteriskAmpersand/Kurogami2134 `p3rd_monster_anim.bt`). Parser:
+**`mhfu_model.anim.parse_p3rd`** (was a stub returning `tracks=[]` — that's why no conversion
+existed before; now fully decoded, 16 tests):
+```
+BLOCK   : u32 bone_count ; u32 block_size ; u32 loop ; u32 pad
+BONE    : u16 num_channels ; u16 record_size
+CHANNEL : u16 channel_bit (SAME bits: 0x40=locX …) ; u16 kf_count ; u32 chan_size(=8+8*kf)
+KEYFRAME: <4h> value, frame, ease_in, ease_out   (IDENTICAL to MHFU 0x64)
+```
+Container header is **variable-size**: word1 = `header_size`; the LAST header word (at
+`header_size-4`) = `first_anim`; the slot table is at **`header_size+4`** with length
+`(first_anim - header_size - 4)/4` (NOT word0/word2 — that was the old decode-0-anims bug;
+`header_size` is 0x18 for small monsters, 0x20 for big). Same quantization (rot 4096=90°,
+loc /16, scl /256 — `shared.py`). Real in-quest movesets: **`file_03997`–`file_04016`** (small/
+medium monsters) and the **raw `.anim`** big monsters **`file_05142`–`file_05424`** (42-48
+bones). The authentic Brute moveset = **`file_05250`** (77 clips). Per-monster anim→skeleton
+bone maps (`bone_offset`/`missing_bones`) are in the upstream `skipped_bones.md`.
+
+**Cross-game port → MHFU 0x64 3-stream** (`anim_ingame.swap_anim_to_realmotion`,
+`from_flat_anim`): `bone_match.match_skeletons` builds the source→host joint correspondence
+(by bind-world position); each source track is re-emitted on the host joint it drives,
+re-sorted to native channel order, **SCALE channels DROPPED** (the engine's bit→ordinal table
+`0x089A5C44` only maps rot+loc; scale → OOB crash), padded/partitioned to the host count
+(Tigrex = 45, split 31/9/5). Cross-rig fixes (2026-06-22): unmatched host joints →
+`rest_bone` (identity rot + bind pos, NOT `empty_bone` which zeroes the matrix → collapse);
+a host chain LONGER than the source (Tigrex tail 5 vs Brute 4) uses `bone_match.fill_unmatched`
++ skinning `exclude=` so the extra joint rests without kinking (a parent+child sharing one
+source compounds rotation → tail whip). Driven end-to-end by `port_p3rd.port_monster`
+(see `docs/PMO_MODEL_FORMAT.md`).
+
 **This closes animation export.** Full static pipeline now available:
 geometry (`pmo.py`) + skeleton & bind-pose (`skeleton.py`) + animation (`anim.py`) +
 implicit mesh↔bone mapping → everything Blender needs for rigged monster import/export.
