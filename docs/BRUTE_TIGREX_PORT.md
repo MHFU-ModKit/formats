@@ -414,3 +414,30 @@ Deep HITL RE this session (full write-up: memory `brute-terrain-sink-re`). Three
 
 - Also still open from before: real per-clip AI (movement looks "yanked" = native action cycling,
   no bespoke AI layer yet) and the source-geometry rebuild from raw MHP3rd (companion-file path).
+
+---
+
+## STATUS 2026-06-24 (cont.) — skinning glitches + the generalization plan
+
+After grounding, in-game review found residual **skinning glitches**: a chest/throat hole and, at
+the wing roots, a tear. Root cause: our skinning is GUESSED (`pmo_skin.auto_skin` nearest-bone) +
+PATCHED (`pmo_skin.weld_seams`). Iterated welds (all on disk as rollback PACs):
+- v53 = no weld (chest+hip holes, wings fine).
+- v54 = weld ALL coincident cross-bone seams (>150 boneDist) to a single shared bone → holes gone
+  but the **wing root stiffened** (welding a thin membrane to one rigid bone distorts it).
+- v56/v57 = BANDED weld (`pmo_skin.weld_seams(min_bonedist,max_bonedist)`, band the DOMINANT-bone
+  separation, default [150,300]) → wings preserved (333-boneDist membrane skipped) + chest welded,
+  but the single-bone weld now makes **rigid spikes** on belly/back, and a throat↔chest seam tears.
+Shipped build = `tmp/brute_tigrex_v57_weldband2.bin`. New tools: `tools/find_skin_seams.py`
+(pose-independent tear detector — the reliable offline metric), `blender_mhfu/hole_check.py`
+(approximate multi-angle render; do NOT trust an anim-posed offline render — the importer FK
+diverges from the engine).
+
+**Conclusion: single-bone welding is the wrong tool (fixes holes, makes spikes). The principled fix
+= WEIGHT TRANSFER (drop the weld).** And the user wants to port monsters with **no similar MHFU
+native** — which breaks "transfer from the native" — so the plan generalizes: same-family transfers
+from the native MHFU monster; no-reference uses the SOURCE model's own rigid binding remapped onto
+the host via a bone map; both then smooth + inpaint + interactive review.
+
+**→ Full forward plan + 3-agent research synthesis (algorithms, free/open tools to adopt, the
+interactive-addon design): `docs/MONSTER_PORT_SKINNING_PLAN.md` (Phases A/B/C).** Continue there.
