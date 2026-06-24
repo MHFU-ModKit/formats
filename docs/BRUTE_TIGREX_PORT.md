@@ -440,4 +440,28 @@ from the native MHFU monster; no-reference uses the SOURCE model's own rigid bin
 the host via a bone map; both then smooth + inpaint + interactive review.
 
 **→ Full forward plan + 3-agent research synthesis (algorithms, free/open tools to adopt, the
-interactive-addon design): `docs/MONSTER_PORT_SKINNING_PLAN.md` (Phases A/B/C).** Continue there.
+interactive-addon design): `docs/MONSTER_PORT_SKINNING_PLAN.md` (Phases A/B/C).**
+
+---
+
+## STATUS 2026-06-24 (final) — PHASE A DONE, skinning FIXED, in-game confirmed
+
+The principled fix landed and is HITL-verified. **`pmo_skin.transfer_weights_from_reference`** does
+closest-surface barycentric weight transfer from the native Tigrex (`file_06185` sub1 — already
+perfectly skinned to the exact host rig) onto each Brute vertex; dead host joints (the anim leaves
+at rest) reassign to their nearest live ancestor (preserves the tail fix). **No nearest-bone guess,
+no seam weld.** Wired as the same-family path `port_p3rd.port_monster(skin="transfer")` /
+`build_p3rd_port.py --skin transfer` (reference = the host frame's own PMO sub); `auto_skin` +
+`weld_seams` stay as the **no-reference** default for the Phase-B (no-similar-native) path.
+
+- Shipped build = **`tmp/brute_tigrex_v58_transfer.bin`** (relocate inject; `brute_tigrex.lua` →
+  v58; deployed to both PPSSPP memsticks).
+- In-game: **throat/belly holes gone, belly/back spikes gone, tail no longer cut** (user-confirmed).
+- Offline seam metric (`tools/find_skin_seams.py`): INTER-vgroup tear candidates **191 (v53) /
+  122 (v57) → 6**; worst bone-separation **333 → 116** (the 6 residual = mild hip/groin creases,
+  not holes). Encode valid: 0 unresolved weights, all weight-sums = 1, palette ≤ 8.
+- Tests: `tools/mhfu_model/tests/test_pmo_skin.py` adds transfer-correctness + dead-joint
+  reassignment; all 9 pass (32/32 across skin/p3rd/anim suites).
+
+**Phases B (no-reference / Zinogre-Arzuros-class) and C (interactive Blender review addon) are
+DEFERRED** (Phase A meets current needs). Resume at `docs/MONSTER_PORT_SKINNING_PLAN.md`.

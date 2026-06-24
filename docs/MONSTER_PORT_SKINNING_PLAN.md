@@ -2,8 +2,14 @@
 
 Branch `mhp3rd-monster-port`. Forward plan + research synthesis for **clean, generalizable
 monster porting**. Written 2026-06-24 after the Brute Tigrex port reached "renders + animates
-+ textured + grounded + deals damage, but with residual skinning glitches." Continue here
-next session.
++ textured + grounded + deals damage, but with residual skinning glitches."
+
+> **STATUS 2026-06-24: PHASE A DONE + IN-GAME CONFIRMED. Phases B & C DEFERRED** (user
+> decision — the same-family quality is sufficient for current needs). The clean v58 Brute
+> (native-Tigrex weight transfer) was verified live: throat/belly holes gone, spikes gone,
+> tail no longer cut. Resume B (no-reference / Zinogre-Arzuros-class) + C (interactive Blender
+> addon) here when a no-similar-native monster is wanted. The B/C sections below are the
+> ready-to-execute plan; nothing in them has started.
 
 ---
 
@@ -16,11 +22,14 @@ The **authentic Brute Tigrex** is ported and live in MHFU (Giadrome→Tigrex swa
   off-by-one** (collapsed root chain starved the host hip of its vertical `locY`), fixed in
   `bone_match._fix_leading_root_chain`. NOT a terrain problem. (See `BRUTE_TIGREX_PORT.md`,
   memory `brute-terrain-sink-re`.)
-- ⚠️ **REMAINING: skinning glitches** — the deformation skinning is *guessed* (`pmo_skin.auto_skin`
-  nearest-bone) + *patched* (`pmo_skin.weld_seams`). This is whack-a-mole: welding seam verts to
-  a single rigid bone fixed the chest holes but created **rigid spikes** on the belly/back, and a
-  throat↔chest seam still tears. Shipped build = `tmp/brute_tigrex_v57_weldband2.bin` (banded
-  weld). **This plan replaces the guess+patch skinning with a principled approach.**
+- ✅ **SKINNING FIXED (Phase A, v58, in-game confirmed 2026-06-24)** — replaced the *guessed*
+  (`pmo_skin.auto_skin` nearest-bone) + *patched* (`pmo_skin.weld_seams`) skinning with principled
+  **weight TRANSFER from the native Tigrex** (`pmo_skin.transfer_weights_from_reference`): the
+  native `file_06185` sub1 is already perfectly skinned to the exact host rig, so for each Brute
+  vert we closest-surface-barycentric-blend the native influences. No guess, no weld → throat/belly
+  holes gone, spikes gone, tail no longer cut (HITL-verified). Shipped build =
+  `tmp/brute_tigrex_v58_transfer.bin`. Offline seam metric: INTER-vgroup tear candidates
+  191(v53)/122(v57) → **6**, worst bone-sep 333 → 116.
 
 **The new constraint that shapes this plan:** the user wants to port monsters with **NO similar
 native monster in MHFU** (Zinogre, Arzuros, …), not just Tigrex-family. So the pipeline must work
@@ -104,8 +113,27 @@ implementing each phase.
 
 ## PHASE A — fix the Brute (same-family, quick win)
 
+**STATUS 2026-06-24: DONE — IN-GAME CONFIRMED.** v58 = `tmp/brute_tigrex_v58_transfer.bin`
+(deployed to both PPSSPP memsticks; `brute_tigrex.lua` points at it; relocate inject, 1.62 MB).
+HITL-verified live: throat/belly holes gone, spikes gone, tail no longer cut. Offline seam
+metric (`find_skin_seams.py`) **collapsed**: INTER-vgroup tear candidates **191 (v53) / 122
+(v57) → 6**, worst bone-sep **333 → 116**; the 6 residual are mild creases at the hip/groin
+junction (bone 2 vs 21/26), not red holes. Encode valid (0 unresolved weights, all sums = 1,
+palette ≤ 8). The reference-transfer approach is validated end-to-end.
+
 **Goal:** a clean v58 Brute — no spikes, no holes — by replacing the guess+patch skinning with
 native-Tigrex weight transfer. Validates the reference-transfer approach end-to-end.
+
+**Implemented (this session):**
+- `pmo_skin.transfer_weights_from_reference(mesh_groups, ref, parents=, dead=)` — closest-surface
+  barycentric weight transfer from a fully-skinned reference SkinModel (vectorized-numpy Ericson
+  `_closest_bary_all`). Dead host joints (anim leaves at rest) reassigned to nearest live ancestor
+  (`_live_ancestor`) — preserves the tail fix. Pure-Python, headless, no scipy/trimesh.
+- `port_p3rd.port_monster(..., skin="transfer")` — same-family path: reference = the host frame's
+  OWN PMO sub (native Tigrex `file_06185` sub1); drops `auto_skin`+`weld_seams` entirely.
+- CLI `build_p3rd_port.py --skin transfer`; tests `test_pmo_skin.py` (transfer correctness +
+  dead-joint reassignment), all 9 pass. `auto_skin`/`weld_seams` remain the **no-reference**
+  default (Phase B).
 
 **Tasks:**
 1. Implement weight transfer from the native Tigrex (`file_06185` sub1, already perfectly skinned
@@ -205,5 +233,7 @@ interactive layer.
   new modules.
 
 ## Recommended order
-**A** (clean Brute + validate transfer) → **C** (the addon, folds in B's interactive bits) → finish
-**B** algorithm pieces inside the addon. Each phase is independently shippable.
+**A** (clean Brute + validate transfer) ✅ DONE → **C** (the addon, folds in B's interactive bits)
+→ finish **B** algorithm pieces inside the addon. Each phase is independently shippable. **B & C
+are DEFERRED** as of 2026-06-24 (Phase A meets current needs); pick up here for a no-similar-native
+monster (Arzuros suggested first — quadruped, no wings/tail, fewer bone-map edge-cases than Zinogre).
