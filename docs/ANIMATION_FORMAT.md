@@ -170,6 +170,21 @@ a host chain LONGER than the source (Tigrex tail 5 vs Brute 4) uses `bone_match.
 source compounds rotation → tail whip). Driven end-to-end by `port_p3rd.port_monster`
 (see `docs/PMO_MODEL_FORMAT.md`).
 
+**Cross-rig fix (2026-06-24) — leading root-chain alignment (`bone_match._fix_leading_root_chain`).**
+The position matcher is greedy nearest-by-bind-world; it **fails on the collapsed structural root
+chain** — the leading run of bones all at the origin (zero-length structural joints). The MHFU
+Tigrex host has **3** origin bones, the MHP3rd Brute source **2**, so greedy paired host0↔src0,
+host1↔src1 and left **host joint 2 (the HIP) UNMATCHED**. The hip carries the body's vertical
+positioning `locY` (≈4809 on the Brute) — undriven, the mesh renders ~a lower-body-height below the
+(correctly-grounded) entity origin and the monster looks **sunk into the floor** (this was long
+misdiagnosed as a "terrain-registration gap" — it is NOT; the engine grounds the entity correctly,
+memory `brute-terrain-sink-re`). FIX = a post-pass in `match_skeletons` that detects the leading
+origin run in each skeleton (`Lh`, `Ls`) and re-aligns them **from the TAIL** (host[Lh-1]↔src[Ls-1],
+…), leaving surplus LEADING host bones as placeholders (None) — exactly the native layout's leading
+empty joints. No-op when the chains are equal length (safe for equal-root / same-rig pairs).
+Result on the Brute: `host2(hip) ← src1`, branch matches unchanged (avg bind-dist 14.3), all 26
+model tests pass, in-game = stands on his feet.
+
 **This closes animation export.** Full static pipeline now available:
 geometry (`pmo.py`) + skeleton & bind-pose (`skeleton.py`) + animation (`anim.py`) +
 implicit mesh↔bone mapping → everything Blender needs for rigged monster import/export.

@@ -383,3 +383,34 @@ replication). The clean `brute_tigrex_v32_modelspace.bin` geometry came from an 
 tool and is NOT reproducible from raw `file_04898`+`file_04899` yet. This blocks (a) a rendered
 catalog of MHP3rd big monsters and (b) an authentic source-geometry rebuild in the Blender addon.
 Self-contained v102 PMO = `pmo_sub + companion` (companion at `ge_base == len(pmo_sub)`).
+
+---
+
+## STATUS 2026-06-24 — sink SOLVED (anim retarget), damage confirmed, chest holes open
+
+Deep HITL RE this session (full write-up: memory `brute-terrain-sink-re`). Three results:
+
+- **Sink RESOLVED — it was the anim retarget, NOT terrain.** The long-standing "swap monster
+  isn't terrain-registered → sinks" theory is **RETRACTED**. Proven HITL: a swapped *native* Tigrex
+  never sinks; the swapped Brute's **entity sits exactly on the floor** (entity `+0x204` == player
+  combat-entity `0x090B3440+0x204`, measured co-located — note `camera-target 0x09998D54` is a
+  CONSTANT ~270, NOT the floor). The engine grounds the entity correctly; the **mesh** rendered ~a
+  lower-body below the origin because the cross-game **bone-matcher mis-aligned the collapsed root
+  chain** (host Tigrex 3 origin bones vs Brute source 2) and starved the **host HIP (joint 2)** of
+  its source vertical track (`locY`≈4809). Fixed at the source: `bone_match._fix_leading_root_chain`
+  (align the leading origin run from the tail; surplus host root → placeholder). Rebuilt
+  **`brute_tigrex_v53_animfix.bin`**; cold-booted → Brute **stands on his feet, idle and moving.**
+  The obsolete per-frame floor-poke hack in `brute_tigrex.lua` is removed.
+
+- **Damage CONFIRMED working.** The Brute hits the player. A Giadrome→Tigrex *swap* yields a fully
+  combat-registered native monster (collision node `entity+0x2EC` present). The `combat-registration-
+  node-gate` ~2-damaging-monster cap is a CLONE limitation; a single swapped monster is unaffected.
+
+- **OPEN (minor): chest skinning holes.** Red gaps at the chest/throat/front-leg boundary under
+  animation. NOT missing geometry (88 grp / 2689 v / 2973 f all preserved; bind pose renders clean)
+  — a pose-dependent **skinning tear** where verts blended across body-region-boundary bones
+  separate when posed, exposing backfaces. Fix = refine the chest-boundary skinning (rebuild +
+  in-game iteration). Next-session follow-up.
+
+- Also still open from before: real per-clip AI (movement looks "yanked" = native action cycling,
+  no bespoke AI layer yet) and the source-geometry rebuild from raw MHP3rd (companion-file path).
