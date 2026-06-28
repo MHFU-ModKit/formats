@@ -159,6 +159,16 @@ native-Tigrex weight transfer. Validates the reference-transfer approach end-to-
 
 ## PHASE B — general no-reference pipeline (Zinogre/Arzuros-class)
 
+> **NOTE (2026-06-29):** the **source-skeleton** Brute's tail-cut is **NOT** a Phase-B
+> skinning defect. Proven offline 6 ways: `auto_skin`'s region-lock already binds the tail
+> vgroups to **tail-only bones**, there are **0 tail tears** (the only 2 real tears sit on
+> the upper back/wing), the tail joints are **fully animated**, and the source-skeleton v61
+> is **bind-pose-identical** to the transfer-skinned v58. So no skinning change fixes it —
+> the cut is a **posed-only / structural severable-tail** artifact (the 4-joint source tail
+> vs the host's 5), which belongs with the deferred **sever mechanic**, not here. Phase B
+> remains about *holes/spikes* on a genuinely-no-reference monster, which is a different
+> problem.
+
 **Goal:** port a monster with no similar MHFU native, cleanly, using the source's own binding.
 
 **Tasks:**

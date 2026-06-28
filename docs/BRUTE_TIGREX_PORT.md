@@ -465,3 +465,34 @@ no seam weld.** Wired as the same-family path `port_p3rd.port_monster(skin="tran
 
 **Phases B (no-reference / Zinogre-Arzuros-class) and C (interactive Blender review addon) are
 DEFERRED** (Phase A meets current needs). Resume at `docs/MONSTER_PORT_SKINNING_PLAN.md`.
+
+---
+
+## STATUS 2026-06-29 — SOURCE-SKELETON build (v61) validated; deployed for anim-label mapping
+
+Two Brute builds now exist, for two purposes:
+
+- **`tmp/brute_tigrex_v58_transfer.bin`** — the **finished/shipping** Brute. Retarget onto the
+  HOST Tigrex skeleton (48 bones) + native Tigrex motion + transfer skin. Perfect incl. tail.
+- **`tmp/brute_tigrex_v61_srcskel_pad.bin`** — the **source-skeleton** Brute (his OWN 46-bone
+  MHP3rd rig + his OWN 77-clip moveset + his OWN geometry, no down-rig). Built with
+  `build_p3rd_port.py --source-skeleton` (`port_p3rd.port_monster(source_skeleton=True)`). Stands
+  and animates in-game (HITL). **This is the build deployed now** — it is the right one for
+  **mapping the Brute's authentic animations to labels** via the debug shell, because each forced
+  action plays his *own* clip on his *own* rig 1:1 (the retarget build would show host-Tigrex
+  motion instead). Workflow: cold boot the Giadrome→Tigrex→Brute quest, then drive
+  `src/mhfu_bot/cli` (`anim sweep` / `anim table` + `cli_bridge.lua` force-action) to trigger each
+  clip and record the action-id → animation label.
+
+**Sink fix (v60→v61) = leading-origin pad.** The native big-mon overlay hardcodes the hip joint
+index (Tigrex = joint 2, tail of a 3-bone leading-origin chain). The source Brute's shorter
+leading chain landed the hip too low so the anim body-lift missed → render sink (entity correctly
+grounded). `lead_pad = host_lead_origin − source_lead_origin` prepends placeholder origin bones
+and shifts the anim/skin by N. v61 (lead_pad=1) stands.
+
+**Tail-cut on v61 is NOT skinning** (proven offline 6 ways — tail vgroups bind tail-only bones, 0
+tail tears, tail joints fully animated, bind-pose-identical to v58). It is a **posed-only /
+structural severable-tail** artifact (4-joint source tail vs the host's 5), folded into the
+deferred **sever mechanic** (memory `severable-breakable-parts-context`). Cosmetic for the
+anim-mapping purpose; do not chase it as a skinning bug. Full RE: memory
+`source-skeleton-port-validated`.
