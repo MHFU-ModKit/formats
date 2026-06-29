@@ -136,11 +136,41 @@ flat/sequentially → it over-expanded a v102 mesh to ~34k garbage verts. `run_g
 `file_05249`): clean **2689 verts / 2973 faces**. Geometry is often in a **companion file**
 (`ge_base >= pmo size` → read GE from `file_<model+1>`); `pmo_p3rd.parse(pmo, geo_blob=)`.
 
-**Cross-game skinning — `pmo_skin.auto_skin`.** MHP3rd monsters ship as **rigid pieces
-with NO per-vertex weights** (all vgroups weightCount=0; bound engine-side). To deform
-under an MHFU host skeleton we DERIVE blend skinning. `auto_skin(mesh_groups, bone_world,
-parents=, …)` weights each vertex to nearby bones with these controls (all proven on the
-Brute):
+**MHP3rd v102 bone palette / per-vertex skinning — `pmo_p3rd` (RE'd + validated 2026-06-29).**
+CORRECTION: MHP3rd big monsters are **blend-skinned, NOT rigid.** The real Brute
+(`file_05248`) carries genuine per-vertex weights — 1492/2689 verts have fractional
+(0<w<1) influences, 1–6 bones each. (The earlier "all vgroups weightCount=0 / rigid
+pieces" claim came from a *misidentified* Lavasioth lobby model `file_04898`.) The v102
+skin uses the **SAME palette model as MHFU** (see "Skinning" above):
+- **Header field [10]** (`skeletonOffset`, the one long mislabeled `unk10`) = the **bone
+  palette** = a `Weight{slot:u8, bone:u8}[]` array.
+- **vgroup record `2BH3I`**: `vg[0]`=materialOffset, **`vg[1]`=boneCount**, **`vg[2]`=
+  cumulativeBoneCount** (offset into the palette — NOT a single `boneref`), then the 3 GE
+  pointers. The engine keeps a running `aux[slot]=bone`; each vgroup consumes its
+  `boneCount` palette entries at `palette[cum : cum+bc]`.
+- **per vertex**: the VTYPE `weightCount` fractions blend `aux[0..wc-1]`, so influences =
+  `[(palette[cum+k].bone, weight[k])]`. `bone` indexes the source `0x80000000` skeleton.
+- The real **vgroup count is `max(vg_start+vg_count)` over the mesh table**, NOT header
+  field [6] (unreliable — e.g. Brute reports 24, real is 88).
+- Validated zero-error on `file_05248`: 300/304 palette entries covered by the 88 vgroups,
+  every slot sequential, every bone < 46 (the skeleton's bone count). See memory
+  `p3rd-v102-bone-palette-decoded`.
+
+`pmo_p3rd.parse` now reads this palette (`_resolve_running_palette` from `pmo_skin`) and
+attaches each vertex's authentic `influences = [(bone, weight)]` (source-skeleton indices).
+
+**Authentic-skin port — `pmo_skin.from_source_influences`.** The principled path: pair
+each vertex's source influences with the OUTPUT rig (source-skeleton mode: source bone
+`i → i + lead_pad`, 1:1) → the monster's REAL skin, no guess, no oracle. Caps each vgroup
+at the PSP 8-matrix limit. Selected by `port_p3rd` `skin="source"` (auto-upgraded from
+`"auto"` in `source_skeleton` mode when the source carries weights). This is what
+`build_p3rd_port.py --source-skeleton --skin source` (the Brute **v62**) uses, replacing
+the `auto_skin` guess that caused the source-skeleton "crunch / bends-wrong" deformation.
+
+**Cross-game skinning (no-reference fallback) — `pmo_skin.auto_skin`.** When the source
+has no usable weights (or a no-similar-native target), DERIVE blend skinning instead.
+`auto_skin(mesh_groups, bone_world, parents=, …)` weights each vertex to nearby bones with
+these controls (all proven on the Brute):
 - `segment=True` (default): **bone-SEGMENT distance** (distance to the bone's line from its
   parent, not the joint) — keeps a chest vertex on the spine instead of the euclidean-near
   wing-root joint (fixes 679u stretch flaps).
@@ -270,8 +300,10 @@ if weight != 0:
 **Status (2026-06-13): weights are now captured.** `pmo.py` line ~82 no longer
 discards them — it stores `vertex['weights'] = [w / weight_trans for w in raw_vertex]`
 (OBJ export still ignores the field; importers can read the binding). NOTE:
-MHFU **monster** PMOs set `weight = 0` on every vertex group (rigid skinning, see
-below), so this path only fires for models that actually blend (e.g. player armor).
+**small** monster PMOs (em01-class) set `weight = 0` on every vertex group (rigid
+skinning), but **big** monsters blend (e.g. Tigrex `file_06185`, 1–8 bones/vertex) — and
+so do MHP3rd big monsters (see the v102 bone-palette section above). The bone *indices*
+live in the PMO bone palette (header field 10), not the per-vertex stream.
 
 ## Mesh Structure
 

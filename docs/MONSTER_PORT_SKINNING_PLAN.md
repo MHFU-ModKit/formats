@@ -44,8 +44,12 @@ downstream is identical:
 
 ```
 [1] SEED      same-family → copy the NATIVE MHFU monster's weights (perfect oracle, same rig)
-              no-native   → use the SOURCE model's OWN rigid piece→bone binding (correct in its
-                            own game), remapped onto the host skeleton via a bone map
+              source-rig  → use the SOURCE model's OWN blend weights (decoded from the v102 bone
+                            palette by pmo_p3rd → pmo_skin.from_source_influences). IMPLEMENTED
+                            2026-06-29 (`--skin source`); best when the source rig is SHIPPED
+                            (source-skeleton: bone i → i+lead_pad, 1:1). NOTE: MHP3rd big monsters
+                            ARE blend-skinned (the old "rigid pieces" claim was a misID).
+              no-native   → remap the source weights onto the host skeleton via a bone map
 [2] SMOOTH    seed → clean blend weights (region-locked auto_skin / Blender Data-Transfer /
                       Robust Weight-Inpainting for occluded verts)
 [3] SEAMS     close tears: merge coincident verts, OR equalize bone at seams — NOT a rigid
@@ -172,8 +176,11 @@ native-Tigrex weight transfer. Validates the reference-transfer approach end-to-
 **Goal:** port a monster with no similar MHFU native, cleanly, using the source's own binding.
 
 **Tasks:**
-1. **Read the source rigid binding:** MHP3rd pieces are rigid (weightCount=0; effective bone =
-   running-palette slot 0). `pmo_skin.read` already yields `[(source_bone, 1.0)]` per vert.
+1. **Read the source binding:** ⚠️ CORRECTED 2026-06-29 — MHP3rd big monsters are **blend-skinned,
+   not rigid** (the "weightCount=0" claim was a misidentified model). `pmo_p3rd.parse` now decodes the
+   v102 bone palette (header field 10) and yields each vert's real `[(source_bone, weight), …]`;
+   `pmo_skin.from_source_influences` ports them. (Genuinely-rigid sources still resolve to
+   `[(bone, 1.0)]` — the bc=1 case.)
 2. **Bone-correspondence map (the human step):** for non-Tigrex creatures, position-distance
    (`bone_match`) fails at extremities → build a **topology-aware** matcher (label bones by
    parent-chain depth + child-count, match labels first, ties by distance) AND/OR an interactive

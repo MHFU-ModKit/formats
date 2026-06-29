@@ -361,8 +361,12 @@ are **retracted**.
   native Tigrex** (214 vgroups / 4128 verts / 2919 faces, 0.0 position+weight error, winding kept).
 - `build(scale, vgroups, materials)` — from-scratch monster PMO (generated mesh/material tables).
 - `auto_skin(mesh_groups, bone_world, nb=3)` — **derive** smooth blend weights (each vertex → its
-  `nb` nearest skeleton bones, inverse-distance; per-vgroup palette capped at PSP's 8). For ported
-  rigid-piece sources that have no weights.
+  `nb` nearest skeleton bones, inverse-distance; per-vgroup palette capped at PSP's 8). The
+  **no-source-weights fallback** (no-similar-native targets).
+- `from_source_influences(mesh_groups, bone_remap=)` — port the source's OWN blend weights (added
+  2026-06-29). MHP3rd big monsters ARE blend-skinned; `pmo_p3rd.parse` decodes the v102 bone palette
+  and attaches each vert's `(bone, weight)`; this remaps them onto the output rig (source-skeleton:
+  `i → i+lead_pad`). The authentic path (`--skin source`, Brute v62) — no guess.
 
 **The Brute port (shipped, v44):** clean v32 geometry + **native Tigrex tiger-stripe textures** +
 **`auto_skin` nearest-3-bone blend** to the native Tigrex skeleton, injected in-place over
