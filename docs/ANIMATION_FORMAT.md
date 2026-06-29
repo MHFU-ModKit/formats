@@ -185,6 +185,21 @@ empty joints. No-op when the chains are equal length (safe for equal-root / same
 Result on the Brute: `host2(hip) ← src1`, branch matches unchanged (avg bind-dist 14.3), all 26
 model tests pass, in-game = stands on his feet.
 
+**Clip TIMING — rest-bone pad spans the clip's REAL length (2026-06-29).** Each clip's length is
+governed by its own keyframes: **the engine plays a clip to its max keyframe frame, then loops iff
+the clip's `loop` flag is set — there is NO separate per-action duration.** Proven two ways: (a) the
+native Tigrex clips are stored UNPADDED at varied real lengths (26–520 frames) and play fine; (b) the
+Tigrex action-descriptor table (`0x09D5A580` = `file_06108+0x40440`, 8-byte rows: `byte0=action_id+8`,
+`byte1` flag, two small params `0..16`) carries **no frame-count field**. Consequence for porting:
+`from_flat_anim` must span its `rest_bone` padding (unmatched / shortfall joints) to the **clip's real
+length** (`clip_end = max keyframe frame over the source tracks`), NOT a fixed 180. A short clip padded
+to 180 plays its motion then **FREEZES on the last pose until frame 180** before it loops/ends — looks
+like the monster "stops abruptly / hangs." Trimming the pad restores the monster's authored timing
+(Brute: 77/77 clip lengths now match the source moveset; the 50 short clips no longer freeze-pad).
+The source `loop` flag is carried through verbatim (`Block(loop=anim.loop)`), so loops were always
+correct — the bug was purely the pad length. (Modders: `anim clips <pac>` lists every slot's real
+length + loop; pair with the live `anim sweep` for the a1→slot map.)
+
 **This closes animation export.** Full static pipeline now available:
 geometry (`pmo.py`) + skeleton & bind-pose (`skeleton.py`) + animation (`anim.py`) +
 implicit mesh↔bone mapping → everything Blender needs for rigged monster import/export.
