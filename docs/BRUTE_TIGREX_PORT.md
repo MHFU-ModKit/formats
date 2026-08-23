@@ -409,6 +409,9 @@ Deep HITL RE this session (full write-up: memory `brute-terrain-sink-re`). Three
 - **Damage CONFIRMED working.** The Brute hits the player. A Giadrome→Tigrex *swap* yields a fully
   combat-registered native monster (collision node `entity+0x2EC` present). The `combat-registration-
   node-gate` ~2-damaging-monster cap is a CLONE limitation; a single swapped monster is unaffected.
+  *(This was retracted on 2026-06-30 and then RE-CONFIRMED on 2026-08-23 — the swap half is right:
+  a swap is fully combat-registered and damages. The "the Brute hits the player" half is wrong for
+  any build whose animation sub is our re-encoded pack. See §2026-08-23.)*
 
 - **OPEN (minor): chest skinning holes.** Red gaps at the chest/throat/front-leg boundary under
   animation. NOT missing geometry (88 grp / 2689 v / 2973 f all preserved; bind pose renders clean)
@@ -500,3 +503,140 @@ structural severable-tail** artifact (4-joint source tail vs the host's 5), fold
 deferred **sever mechanic** (memory `severable-breakable-parts-context`). Cosmetic for the
 anim-mapping purpose; do not chase it as a skinning bug. Full RE: memory
 `source-skeleton-port-validated`.
+
+---
+
+## STATUS 2026-08-23 — the swap was never the problem; the ASSET INJECT is
+
+Re-opened the "a swapped big monster deals no damage" question with a clean, instrumented
+A/B on the live game. **The 2026-06-30 / 07-01 conclusion is RETRACTED.** A Giadrome→Tigrex
+swap fights and kills perfectly well. What removes damage is the **Brute PAC inject**, and it
+does so on a fully NATIVE monster with no swap anywhere in the picture.
+
+### The measurements
+
+All on the snowy mountains, hunter standing in section 6, every SMALL monster held at HP 0 so
+the big monster is the only possible damage source (`tools/dmg_experiment.py --cull-smalls`).
+A drop is only credited when `monster+0x29A == area_index` — cross-section distances are
+meaningless because every section has its own world frame.
+
+| quest | monster | inject | result |
+|---|---|---|---|
+| 1★ *Herz in der Hose* | native roaming Tigrex | none | **70 dmg, then killed the hunter** |
+| 2★ *Anführer der Fleischfresser* | Giadrome **swapped**→Tigrex | none | **51 / 52 / 11 dmg, killed the hunter** |
+| 1★ *Herz in der Hose* | native Tigrex | **v63** (source skeleton) | **0 damage in 200 s** |
+| 1★ *Herz in der Hose* | native Tigrex | **v58** (host-rig retarget) | **0 damage in 220 s** |
+
+Row 2 is the one that overturns the old finding, and rows 3–4 localise the real cause: the
+monster in both is a *native* quest Tigrex that the engine built, targeted, provisioned and
+drove itself. Injecting the Brute assets over `file_06185` is the only change, and damage
+stops. Both Brute builds render correctly on screen (screenshots captured mid-run) and the
+engine is demonstrably reading our data — `entity+0x1AC` (anim pack) points into the inject's
+xram copy at `0x0B02xxxx` in both.
+
+### Why the old sessions saw a broken swap
+
+Two contaminants, both since removed from the test path:
+
+1. **They were testing with the Brute inject on** — which is the actual cause, and is
+   independent of the swap.
+2. **The Brute/Tigrex scripts wrote to the monster every tick** (`+0x29A` section tracker,
+   `+0x638` visibility, `entity_set_size`, freeze gate) to work around the spawn-visibility
+   bug. The runs above do **none** of that and the monster behaves natively.
+   ⇒ 🔴 **Do not maintain a big monster per-tick.** The visibility bug fixes *itself*: the
+   monster spawns in its own section and ROAMS to the player, and that transition initialises
+   `+0x29A` naturally. Walk to a section the Tigrex is native to (6, 7, 8, sometimes 3) and
+   wait for it.
+
+The brain-state timelines back this up. A clean swap cycles `entity+0x299` through
+2→3→11→4→5→8 with `+0x1D5` reaching 3 and `+0xBC` bit0 clearing — i.e. it escalates. The
+07-01 note that the swap is "stuck at `+0xBC` bit0 = 1, 44/45 frames" did not reproduce.
+
+### Where the inject breaks it — narrowed, not yet closed
+
+Sub-by-sub diff of the injected PACs against native `file_06185`:
+
+| sub | | native | v58 | v63 |
+|---|---|---|---|---|
+| 0 | skeleton | 12896 | **identical** | 12628 |
+| 1 | PMO mesh | 97040 | 80272 | 76048 |
+| 2 | TMH tex | 75008 | 73984 | 73984 |
+| 3 | **animation** | **1008288** | **1426092** | **1418700** |
+| 4–6 | secondary | | identical | identical |
+
+v58 rides the **native skeleton**, yet its animation pack is a re-encoded blob 40% larger than
+native. So "v58 uses native Tigrex motion" is true of the *motion* but not of the *pack* —
+nothing injected has ever run the engine's own animation bytes.
+
+That matters because `anim_ingame` **drops every channel whose transform bit is not
+rot (0x08/0x10/0x20) or loc (0x40/0x80/0x100)** (`swap_anim_to_realmotion`, the `SUPPORTED`
+filter added to kill the scale-channel crash). Anything else a native clip carries — plausibly
+the per-clip markers that arm an attack hitbox — is silently discarded on conversion.
+
+**The bisect build for this is `tmp/brute_tigrex_v64_nativeanim.bin`**: v58's Brute mesh and
+textures with the **pristine native skeleton AND native animation sub**, nothing else changed.
+
+### ✅ RESULT: it is the ANIMATION PACK. Isolated to one sub-resource.
+
+`v64` **hits for 70 / 8 / 19 and kills the hunter** — same quest, same route, same culling as the
+v58 run that dealt exactly 0. The two builds differ in **sub3 and nothing else**:
+
+| build | sub0 skeleton | sub1 mesh | sub3 animation | damage |
+|---|---|---|---|---|
+| v58 | native | Brute | **re-encoded (1426092)** | **0 in 220 s** |
+| v64 | native | Brute | **native (1008288)** | **70/8/19 → hunter dead** |
+
+So the ported **mesh, textures and skinning are all innocent** — a Brute-looking monster that
+fights properly is a build that exists today. What the re-encoded animation pack costs is both
+the damage *and* the pose: v58/v63 render sprawled flat on the ground, v64 stands upright and
+animates (screenshots taken mid-run at ~1700 units).
+
+⇒ **`tmp/brute_tigrex_v64_nativeanim.bin` is the shippable damaging Brute** (his model, skin and
+textures; the engine's own skeleton and motion). It is built by
+`MonsterPac.from_bytes(v58).subs[3].data = native.subs[3].data`.
+
+### 🔴 And the defect in the converter is SLOT OCCUPANCY — found offline, no emulator needed
+
+`Stream.clips` is a dict **keyed by slot index**, so its length is the number of OCCUPIED slots.
+Parsing native `file_06185` sub3 against the ported packs:
+
+| stream | native occupied | v58 occupied |
+|---|---|---|
+| main | **63 / 100** | **100 / 100** |
+| sub1 | **64 / 100** | **100 / 100** |
+| sub3 | **62 / 100** | **100 / 100** |
+
+Native deliberately leaves **37 specific slots empty** — main's empty set is
+`[1, 17, 23, 25, 26, 27, 28, 29, 30, 34, 36, 37, 40, 45, 50, 51, 54, 56, 57, 64, 65, 67, 68, 74,
+80, 82, 83, 85, 86, 87, 88, 89, 90, 92, 93, 94, 95]`, and sub1/sub3's empty sets are that list
+minus one, so the three streams are slot-aligned by construction.
+
+**Our converter fills all 100 slots** (aliasing 23 of them onto shared offsets). The engine
+dispatches an action to a **slot index**, so this both puts the Brute's clips in the wrong slots
+and gives content to slots that are supposed to be empty. That is enough on its own to explain
+the wrong idle pose *and* the dead hitboxes, with no channel-filter theory required.
+
+⇒ **The fix for "the Brute's OWN moveset, still damaging" is to preserve the native slot map:**
+leave the natively-empty slots empty, and place each Brute clip in the slot its corresponding
+native clip occupied (the bone matcher already gives the source→host correspondence; what is
+missing is the same discipline for clip slots). `from_flat_anim` / `swap_anim_to_realmotion`
+currently take a `split` and fill slots 0..99 densely; they need a slot map instead. The
+`SUPPORTED` channel filter (rot+loc only, everything else dropped) remains a secondary suspect
+but is no longer the leading one.
+
+### Tools added
+
+- `tools/dmg_experiment.py` — boot/attach → take a snowy quest → walk to a section → optionally
+  close in on the monster → measure damage. Never calms the monster (unlike
+  `goto_snow_section.py --guard`, which is a mapping aid and suppresses the thing under test);
+  culls small monsters; attributes a drop only when the monster is co-located.
+- `tools/dump_quest_records.py` — hex-dump the live quest's big-monster records + target groups.
+
+### Two traps that cost time here
+
+- 🔴 **`GameSession` defaults to `stop_on_exit=True`.** Attaching to a running emulator to read
+  memory KILLS it on context exit, and the next script silently boots a fresh instance — which
+  reads as "the game lost its state". Pass `stop_on_exit=False` to attach.
+- 🔴 **`mhfu.log` is not printf and Lua 5.4 `%d` rejects a non-integral float.** `mhfu.log(fmt,
+  a, b)` prints the format string verbatim, and `string.format("%d", 1.5)` *raises*, killing the
+  callback — which reads as "events do not fire". Pre-format, and `math.floor` every float.
