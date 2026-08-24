@@ -640,3 +640,118 @@ but is no longer the leading one.
 - 🔴 **`mhfu.log` is not printf and Lua 5.4 `%d` rejects a non-integral float.** `mhfu.log(fmt,
   a, b)` prints the format string verbatim, and `string.format("%d", 1.5)` *raises*, killing the
   callback — which reads as "events do not fire". Pre-format, and `math.floor` every float.
+
+---
+
+## STATUS 2026-08-24 — the anim sub was off by one slot, and it is fixed
+
+The 08-23 bisect ended pointing at sub3 (the animation) and guessed the cause was a missing
+*slot map*. The real cause is smaller and much worse: **the codec read and wrote the MAIN slot
+table one slot off**, so the body played clip *N−1* while the head and tail played clip *N*.
+
+### What was actually wrong
+
+The anim container header is `N × (u32 slot_count, u32 table_offset)`, then `u32 0`, then
+`u32 data_start` — and `hsize` (0x38) is nothing but **stream 0's table offset**. The codec
+treated 0x34 as the main table and called the real slot 99 a "pad word". Full decode, all four
+header sizes and both games: `docs/ANIMATION_FORMAT.md` §"The anim container header, fully
+decoded".
+
+Three invariants pin it, and all three fail at 0x34:
+
+| check | at `0x38` (correct) | at `0x34` (old) |
+|---|---|---|
+| main's empty-slot set vs sub3's | **identical** (38 slots) | shifted by one |
+| co-occupied slots agreeing on clip length | **62 / 62** | 4 / 44 |
+| byte-exact round trip over MHFU's 0x38 anim subs | **36 / 36** | 33 / 36 |
+
+It hid for two months because **parse and encode shared the offset** (a round trip cancels out)
+and because **bind-pose builds alias one block into every slot**, where a one-slot shift cannot
+be seen. It only bites when real motion is authored per slot — the Brute port, and nothing else.
+
+`v58`'s header carries the fingerprint: word `0x34` = `0x00001A50` (main[0]'s block offset,
+clobbering `data_start`) where native and every corrected build have `0x00000998`.
+
+### A second, independent defect: the P3rd moveset was read as one merged table
+
+`parse_p3rd` used an external reference template's `hsize + 4` reading with a single
+`(data_start − hsize − 4)/4`-entry table. `file_05250` actually declares **three streams — 70
+slots, 20 slots, empty** — and both populated ones carry the **full 43-bone rig**, so they are
+two independent clip SETS (MHFU's 0x38 layout is the reverse: streams 0/2/4 partition one rig
+31+9+5). The merged reading shifted set 0 by a slot and stacked set 1 behind it at +69. Stream 0
+alone is the moveset: **58 clips in slots 1..65**.
+
+### Builds
+
+| build | anim | slots filled (main/sub1/sub3) | size |
+|---|---|---|---|
+| native `file_06185` | native | 62 / 64 / 62 | 1 216 512 |
+| v58 | 77 merged clips, main shifted 1 | 100 / 100 / 100 | 1 616 096 |
+| **v65** | v58's clips, alignment fixed | 100 / 100 / 100 | 1 616 096 |
+| **v66** | stream 0 only (58 clips) | 100 / 100 / 100 | 1 319 152 |
+| **v67** | stream 0 + host slot map | **62 / 64 / 62 — identical sets to native** | **996 448** |
+
+`v65` isolates the fix: it differs from v58 in **sub3 and nothing else**, same size, same bytes
+everywhere but the animation.
+
+**`fill_slots="host"`** (now the default in `swap_anim_to_realmotion`) reproduces the host PAC's
+own occupancy slot for slot: the engine dispatches an action to a slot *index*, so the only slots
+that can ever be asked for are the ones the host fills. It aliases a clip into the 20 host slots
+the Brute has nothing for, and drops the 14 Brute clips that land where the host is empty — they
+are unreachable, and they cost size the relocate budget wants. v67 is **smaller than native**.
+
+### The port itself verifies clean, offline
+
+Comparing v67's clips against the MHP3rd source, keyframe for keyframe: of the 58 source clips,
+**44 land in a slot the host dispatches**, and across those 44 clips **1 864 of 1 908 joints carry
+a source track verbatim** — the remaining 44 are exactly one rest-pad joint per clip (the host
+joint with no source match). The conversion is faithful; what was broken was where the clips
+were *filed*.
+
+### ⚠️ The 08-23 damage numbers were measured with a weaker harness than stated
+
+Two defects in `dmg_experiment.py` were only found on 08-24, and both were present for the whole
+08-23 table:
+
+* **The culler never culled.** It used `entities.enumerate_entities`, which stops at the first
+  null registry slot, and the registry is sparse — so it saw two entities and missed the rest. A
+  run logged "culled 0 small monster(s)" while a Giaprey was visibly biting the hunter.
+* **A hit was credited on co-location alone, with no distance bound.** One v67 run booked ten
+  "HIT (monster co-located)" events at a steady **dist ≈ 4 700** while that same uncalled Giaprey
+  took the hunter from 100 to 0 in 10-14 point bites.
+
+What survives: the **50-77 point** hits are Tigrex-scale and cannot come from a Giaprey, so
+"a bare swap fights and kills" stands. What is now weaker: the **0-damage** readings that pinned
+the blame on the asset inject. Without `--await-monster`, a watch can spend its whole window with
+the monster in another section and report exactly 0 — which is what the first v67 run did. The
+conclusion still holds on other evidence (the off-by-one above is a sufficient mechanism, and v64
+with a pristine native anim sub killed), but the 08-23 *measurement* was not as tight as it read.
+
+Both are fixed: the culler scans the whole registry, `--hit-range` (1500) gates attribution on
+distance, and `--await-monster` (300 s) starts the clock only once the monster is co-located.
+
+### The offline animation renderer is a scaffold, NOT yet an oracle
+
+`blender_mhfu/render_ported_anim.py` + `anim_ingame.to_flat_anim` play a built PAC's own clips in
+Blender, which is the check this project has always lacked (`render_check.py` renders the BIND
+pose, and the bind pose is identical between a good port and a broken one).
+
+⚠️ **Do not judge a port by it yet** — the **native** Tigrex clip does not play back clean
+either, so the fault is here, not in the data.
+
+One real cause found and fixed: **the engine's rot channels are a joint's absolute LOCAL
+rotation** (skeleton `bind_rot` is all zeros, so rest orientation is identity), while a Blender
+pose rotation is relative to the bone's rest orientation, which points head→tail. Keying
+`pose_bone.rotation_euler` is therefore off by the rest rotation on every joint. Driving
+`pose_bone.matrix` from engine-space world matrices instead (`A @ bind⁻¹ @ matrix_local`, which is
+what Blender's `pose.matrix @ matrix_local⁻¹` deform needs) takes the native clip from a total
+explosion to a **coherent posed Tigrex** — legs, feet, tail, folded wings.
+
+What is still wrong: a cluster of parts, including the head, floats beside the body. Ruled out —
+the loc channels (only the hip, joint 2, carries a full loc triple; that is root motion), and the
+anim-track → bone mapping (the skeleton declares the split itself at `bone+0x50`: 31 bones id 0,
+9 id 1, 5 id 2, contiguous 0..30 / 31..39 / 40..44, exactly matching the concatenation; ids ≥3 are
+the second model set). Still open: which geometry those floating parts are. `file_06185` is a
+split-mesh monster needing the `vg_rec` breadcrumb, so **Blender vertex-group indices are not
+skeleton bone indices** — a hide-by-bone-index filter hid the body and kept the strays. That is
+where to pick it up.

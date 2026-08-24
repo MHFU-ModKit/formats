@@ -519,15 +519,14 @@ anim the engine actually plays (native Tigrex `file_06185` sub-3) is a DIFFERENT
 RECURSIVE 3-stream form — decoded live via the per-frame interpolator chain
 `0x0885fa0c → 08863198 → 088630d0 → 08863668`. Critical for any cross-game port.
 
-- **Pack header = `0x38`** (not `0x18`): `magic 0x64, hsize 0x38`, then **five
-  `(0x64, suboffset)` pairs** @`+0x08..+0x2F`, `u32 0` @`+0x30`, then the **main
-  100-slot table @`0x34`**. The 5 sub-offsets point to **five contiguous 100-entry
-  u32 sub-tables** (`0x1C8/0x358/0x4E8/0x678/0x808`, each `0x190`, ending at the
-  first anim `0x998`). Empty entries/tables = `0xFFFFFFFF`.
-- **THREE parallel streams** populate three tables — main(@`0x34`), sub1(@`0x358`),
-  sub3(@`0x678`) — that **partition the skeleton's bones** (native Tigrex main block
-  `bc=31`, sub1 `bc=9`, sub3 `bc=5`; 31+9+5 ≈ bone count). Each animation = THREE
-  blocks (one/stream); tables 0/2/4 stay empty. Block tags carry `0x80000000`.
+- **THREE parallel streams** populate three tables — main, sub1, sub3 — that
+  **partition the skeleton's bones** (native Tigrex main block `bc=31`, sub1 `bc=9`,
+  sub3 `bc=5` = 45). Each animation = THREE blocks (one/stream), all under the SAME
+  slot index; tables 1/3/5 stay empty for Tigrex. Block tags carry `0x80000000`.
+
+> ⚠️ The header description that used to sit here — "five `(0x64, suboffset)` pairs,
+> then the main 100-slot table **@0x34**" — was **wrong by one slot**. Corrected
+> 2026-08-24; see the section below.
 - **Blocks are RECURSIVE sections** `{0x80000000|tag, u32 count, u32 size}` down to
   keyframes (top anim block has extra `loop@+0xC`/`loop_start@+0x10`). The per-frame
   interpolator `0x08863668` reads each keyframe section's FRAME-TIME `lh [sect+0xE]`,
@@ -567,6 +566,70 @@ the Blender addon (`blender_mhfu/exporter.export_ingame_bindpose_pac` + operator
    every bone needs real keyframes; skeleton `bind_rot` is all-zeros (rotation is anim-only).
 
 Full debugging arc + key addresses: `docs/BRUTE_TIGREX_PORT.md`.
+
+## 🔴 The anim container header, fully decoded — 2026-08-24
+
+Every animation container in **both games** has the same header, and it is nothing
+but a list of stream tables::
+
+    +0x00   N × (u32 slot_count, u32 table_offset)     # N = hsize/8 - 1
+    +hsize-8  u32 0
+    +hsize-4  u32 data_start        (= end of the last slot table)
+    +hsize    the slot tables, back to back, then the blocks
+
+So the words earlier revisions called `magic` and `hsize` are really **stream 0's
+slot count and stream 0's table offset**. `magic` was always `0x64` only because
+100 slots is the common case, and `hsize` "happens" to equal the header size
+because stream 0's table starts right after the header.
+
+| hsize | streams | files | where |
+|---|---|---|---|
+| `0x18` | 2 | 47 | MHFU |
+| `0x20` | 3 | — | MHP3rd (`file_05250`, Brute) |
+| `0x28` | 4 | 18 | MHFU |
+| `0x38` | 6 | 36 | MHFU (big monsters — Tigrex `file_06185`) |
+
+Validation, on every file: `pairs[0].offset == hsize`, the offsets chain exactly
+(`off[i+1] == off[i] + count[i]*4`), and the last table ends at `data_start`.
+Counts are **per stream** — `file_06111` alternates 100/105 (`0x64`/`0x69`), which
+is why they cannot be derived from the first sub-table's offset.
+
+### The off-by-one this replaces, and what it cost
+
+Two different wrong readings were in the tree, and both shift a monster's moveset
+by a slot:
+
+* `anim_ingame.parse/encode_ingame` read the main table at **`0x34`** — the
+  `data_start` word. Every monster gained a phantom slot-0 clip aliasing its first
+  real block, engine slot *N* was written at our slot *N+1*, and engine slot 99 got
+  the pad word. `anim.py` did the same via `tbase = hsize - 4`.
+* `anim.parse_p3rd` read at **`hsize + 4`** (from an external reference template)
+  with a single table of `(data_start - hsize - 4)/4` entries — which skips stream
+  0's slot 0 *and* concatenates every stream into one flat slot space.
+
+Three independent invariants pin the correct offset, and all three fail at `0x34`:
+
+1. main's empty-slot set is **identical** to sub3's (38 of 100 on Tigrex, differing
+   from sub1's only at 24/25); at `0x34` it is a shifted set.
+2. all **62/62** co-occupied slots agree on clip length; at `0x34`, 40 of 44 disagree
+   by exactly one slot.
+3. `encode_ingame(parse_ingame(x)) == x` byte-for-byte on **36/36** of MHFU's
+   0x38-header anim subs — including the three 100/105 monsters, which the old
+   uniform-count reader could not reproduce at all.
+
+**Why it hid for two months.** Parse and encode shared the same wrong offset, so a
+round trip cancelled out; and a bind-pose build aliases ONE block into every slot,
+where a one-slot shift is invisible. It only bites when real motion is authored per
+slot — which is exactly the Brute port. See `docs/BRUTE_TIGREX_PORT.md`.
+
+### MHP3rd streams are clip SETS, not a bone partition
+
+`file_05250` (Brute) declares 3 streams: 70 slots, 20 slots, and an empty one. Both
+populated streams carry the **full 43-bone rig**, so they are two independent clip
+sets — the opposite of MHFU's 0x38 layout, where streams 0/2/4 partition ONE rig
+31+9+5. Read as a single 89-slot table, set 1 lands behind set 0 at a +69 offset and
+set 0 is shifted by one. `parse_p3rd(blob, stream=0)` is the monster's main moveset:
+58 clips in slots 1..65.
 
 ## References
 
