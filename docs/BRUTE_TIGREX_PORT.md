@@ -755,3 +755,30 @@ the second model set). Still open: which geometry those floating parts are. `fil
 split-mesh monster needing the `vg_rec` breadcrumb, so **Blender vertex-group indices are not
 skeleton bone indices** — a hide-by-bone-index filter hid the body and kept the strays. That is
 where to pick it up.
+
+---
+
+## 2026-08-25 — the port animates, and the remaining gap is semantics, not assets
+
+`brute_tigrex_v67_hostslots.bin` **loads on every cold boot** (`inject_relocate OK fid=6186` →
+`SWAP giadrome -> tigrex` → `SPAWN` → `CON joints=48`, 10+ consecutive boots) and **deals real
+attack damage**: 80/74/75/74/74 in one window (hunter carted), −70 unforced after a charge-in
+preceded by `a1=51`, −53 from a forced `a1=48`. Trip damage is a separate, much smaller bucket
+(<15) and is not what these are.
+
+**The animation half is now verified too, and it needed frames to do it.** Forcing the same
+`a1=51` on `v64_nativeanim` (pristine native anim) and on `v67_hostslots` gives two visibly
+different moves — a Tigrex roar vs the Brute's rock throw. No damage measurement or action-id
+trace can distinguish "plays its own clips" from "falls back to host motion"; two builds forced
+to the same id and filmed can. Captures: `tools/anim_capture.sh <pac> <a1>`.
+
+**What is still wrong is the hitbox, and it is not ours to fix in the asset.** During v67's rock
+throw the hunter covers his ears: the engine is running action 51's ROAR semantics under the
+ported clip. Effects and hitboxes are host-side and bound to the action id →
+`docs/AI_SCRIPTING_ENGINE.md` (2026-08-25) and the `monster-porting` skill. Consequence for this
+port: ~1 landed hit per 20 forced attacks against ~1 per 5 on the native-animation control.
+
+⚠️ **The label file is one off for this build.** `docs/brute_tigrex_anim_ids.txt` was authored by
+forcing ids on an earlier Brute build; on `v67_hostslots`, `a1=N` plays the clip the labels call
+`N+1` (`a1=51` → "throw rocks", labelled 52). Re-derive per build with `anim sweep`.
+
