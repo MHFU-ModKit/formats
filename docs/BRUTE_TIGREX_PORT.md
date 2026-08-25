@@ -773,10 +773,18 @@ trace can distinguish "plays its own clips" from "falls back to host motion"; tw
 to the same id and filmed can. Captures: `tools/anim_capture.sh <pac> <a1>`.
 
 **What is still wrong is the hitbox, and it is not ours to fix in the asset.** During v67's rock
-throw the hunter covers his ears: the engine is running action 51's ROAR semantics under the
-ported clip. Effects and hitboxes are host-side and bound to the action id →
-`docs/AI_SCRIPTING_ENGINE.md` (2026-08-25) and the `monster-porting` skill. Consequence for this
-port: ~1 landed hit per 20 forced attacks against ~1 per 5 on the native-animation control.
+throw the hunter covers his ears.
+
+🔴 **Mechanism, corrected 2026-08-26 (`AI_SCRIPTING_ENGINE.md` §33–34).** The engine was NOT
+"running action 51's semantics" — it was genuinely **roaring**. Behaviour lives in a separate
+channel, `act_set -> entity+0x298/+0x299`, and the Tigrex AI had chosen the roar; `a1` only picks
+the clip. The port had filed the Brute's rock-throw keyframes into the roar's slot because
+`fill_slots="host"` reproduces host occupancy **by position, not by meaning**. So the engine
+behaved correctly throughout and the defect is in the port's clip↔slot mapping.
+
+⚠️ The "~1 landed hit per 20 forced attacks vs ~1 per 5" figure came from forcing `a1`, which is
+now known to move only the animation channel. **Treat it as unattributed**, not as a property of
+the port.
 
 ⚠️ **The label file is one off for this build.** `docs/brute_tigrex_anim_ids.txt` was authored by
 forcing ids on an earlier Brute build; on `v67_hostslots`, `a1=N` plays the clip the labels call
