@@ -790,3 +790,13 @@ the port.
 forcing ids on an earlier Brute build; on `v67_hostslots`, `a1=N` plays the clip the labels call
 `N+1` (`a1=51` → "throw rocks", labelled 52). Re-derive per build with `anim sweep`.
 
+🔴 **And the −1 offset is CONFIRMED FOR ONE ID ONLY (51). Do not assume it holds.** The
+showcase mod derived `charge=61`, `trapped=82`, `break_free=69` from the labels by subtracting
+one, and none of those three has been filmed. Played by hand the Brute **lifted off the ground
+far higher than any of those moves should** — and clips carry root motion on the hip joint
+(joint 2 is the only one with a full loc triple), so a wrong id painted over a grounded
+behaviour visibly flies. That is the leading explanation and it is untested; the other
+candidate is the clip/behaviour mismatch itself (the forced clip's root motion running on top
+of a behaviour that is walking). Film the three ids on `v67_hostslots` before trusting any of
+them: `tools/anim_capture.sh brute_tigrex_v67_hostslots.bin <a1>`.
+
