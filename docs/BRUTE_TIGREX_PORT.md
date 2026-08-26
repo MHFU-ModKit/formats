@@ -820,3 +820,49 @@ would settle it**, and that is one cold boot.
 `tools/anim_capture.sh <pac> <a1>` remains the single-id, single-boot tool and is what the
 v64-vs-v67 comparison above was filmed with.
 
+
+
+---
+
+## 2026-08-26 — why the showcase animations never lined up: every forced clip was the wrong kind
+
+`brute_showcase.lua` drove four moves and forced a clip id on each. With
+`tools/em_moveset.py --states` now confirmed live against a native Tigrex
+(`docs/AI_SCRIPTING_ENGINE.md` §34), those ids can be checked against what the
+behaviour handler actually asks for:
+
+| showcase move | pair forced | clip forced | what the handler asks for |
+|---|---|---|---|
+| `charge_a` | (2, 8) | **61** | 14, 15, 23 |
+| `trapped_a` | (2, 1) | **82** | 15 → 11 → 19 (a three-phase sequence) |
+| `break_a` | (3, 0) | **69** | 43 |
+| — | (0, 4) | — | 54 |
+
+And the ids we forced are used natively by:
+
+* **`a1` 61 → only `(4,1)`, `(4,10)`, `(4,28)`, `(4,29)`** — every one of them in main 4,
+  the **damage-reaction bank**. Clip 61 is a flinch.
+* **`a1` 69 → only `(4,5)`, `(4,20)`, `(4,31)`** — likewise a damage reaction.
+* **`a1` 82 → no behaviour pair in the whole em75 table uses it.**
+
+So the showcase played flinch animations, and one animation the monster's own move table
+never plays, on top of handlers running unrelated moves. That is the whole of "his
+animations did not line up with his actions, and they also did not play properly/fully":
+
+* **Not lined up** — the clip had nothing to do with the move; a flinch under a charge
+  handler reads as an idle-with-a-twitch.
+* **Not fully** — each handler is a phase machine that advances when *its* clip reaches
+  *its* end (`(2,1)` times 62, then 50, then 140 frames). Substituting one clip of a
+  different length means the phase advances mid-clip and re-forces from frame 0. The
+  one-shot latch fixed the re-forcing *within* a phase; it cannot fix a phase boundary
+  arriving at the wrong time.
+
+**The fix is to stop forcing `a1` at all.** Drive `act_set(main, sub)` and let the handler
+choose; if the Brute's clips are numbered differently from the Tigrex's, remap them in the
+PAC, which is where a port's differences belong. `mhfu_on_bigmonster_action` remains the
+right hook for *watching* which action is running.
+
+⚠️ Separately, the executor is not the only writer of the animation channel: `0x09AC5520`
+writes a **single** body-part slot and has **41 call sites in em75.ovl**. A native Tigrex
+uses it in `(0,8)`/`(0,9)`, which read back as `a1 = 1/24/1` and `1/25/1` — body idle, one
+slot on the action. A hook on the executor alone cannot see or match that.
