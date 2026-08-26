@@ -792,11 +792,31 @@ forcing ids on an earlier Brute build; on `v67_hostslots`, `a1=N` plays the clip
 
 🔴 **And the −1 offset is CONFIRMED FOR ONE ID ONLY (51). Do not assume it holds.** The
 showcase mod derived `charge=61`, `trapped=82`, `break_free=69` from the labels by subtracting
-one, and none of those three has been filmed. Played by hand the Brute **lifted off the ground
-far higher than any of those moves should** — and clips carry root motion on the hip joint
-(joint 2 is the only one with a full loc triple), so a wrong id painted over a grounded
-behaviour visibly flies. That is the leading explanation and it is untested; the other
-candidate is the clip/behaviour mismatch itself (the forced clip's root motion running on top
-of a behaviour that is walking). Film the three ids on `v67_hostslots` before trusting any of
-them: `tools/anim_capture.sh brute_tigrex_v67_hostslots.bin <a1>`.
+one. Clips carry root motion on the hip joint (joint 2 is the only one with a full loc triple),
+so a wrong id painted over a grounded behaviour visibly flies.
+
+### 2026-08-26 — the three ids filmed, and why it is still not an answer
+
+`tools/clip_probe.py` films several ids in ONE cold boot: it holds the monster in `(2,1)`, pins
+his coordinates so anything moving is the clip's own root motion, and cuts the recording into a
+folder per id (GIF + numbered contact sheet). Result on `v67_hostslots`:
+
+| a1 | what it renders |
+|---|---|
+| 61 | the Brute **high off the ground**, rotating, limbs spread |
+| 82 | **high off the ground**, rearing and spinning |
+| 69 | **low**, near the snow |
+
+So the lifting the user reported is real and **attaches to specific ids** — it is not a uniform
+render offset.
+
+⚠️ **It is still not enough to say what any of them IS**, for a reason worth knowing: a forced
+pair is not one executor dispatch. One seven-tick `(2,1)` asked the executor for a1 **15, 11, 19
+and 18** in turn — the handler runs a *sequence*. The probe overrode all of them, so each window
+is one clip restarted several times over several different behaviours. `port:play` now latches
+for a single dispatch by default; **re-running the probe with the same one-shot rule is what
+would settle it**, and that is one cold boot.
+
+`tools/anim_capture.sh <pac> <a1>` remains the single-id, single-boot tool and is what the
+v64-vs-v67 comparison above was filmed with.
 
