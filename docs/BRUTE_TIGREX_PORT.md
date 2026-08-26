@@ -866,3 +866,46 @@ right hook for *watching* which action is running.
 writes a **single** body-part slot and has **41 call sites in em75.ovl**. A native Tigrex
 uses it in `(0,8)`/`(0,9)`, which read back as `a1 = 1/24/1` and `1/25/1` — body idle, one
 slot on the action. A hook on the executor alone cannot see or match that.
+
+---
+
+## 2026-08-26 — the port's slot mapping is IDENTITY, and identity is arbitrary
+
+Separate from the forced-`a1` problem above, and more fundamental: even driven perfectly,
+this port would play the wrong animation for most actions.
+
+`a1` **is** the PAC animation slot index (`docs/AI_SCRIPTING_ENGINE.md` §34e), so MHFU slot
+54 is "the roar" *because the Tigrex's own handler for `(0,4)` asks for 54*. The porter's
+`swap_anim_to_realmotion(fill_slots="host")` places MHP3rd **source slot N into MHFU host
+slot N**, and MHP3rd's numbering has nothing to do with MHFU's. MHFU slot 54 therefore
+receives whatever the Brute's clip 54 happens to be.
+
+Measured on `tmp/brute_tigrex_v67_hostslots.bin` against the native `file_06185`:
+
+```
+                 slots filled        DISTINCT clips behind them
+  native  s0/s2/s4   62 / 64 / 62      62 / 64 / 62
+  port    s0/s2/s4   62 / 64 / 62      42 / 44 / 42      <- one block covers 21 slots
+```
+
+Occupancy is mirrored exactly, which is what `fill_slots="host"` promises. But the fill
+works by `st.clips.setdefault(slot, base)` where `base` is a single fallback clip, so
+**21 of 62 reachable slots all play the same animation** — including slot 1, the idle, and
+slots 70/71, which six `(4,x)` damage reactions use.
+
+So the port currently has three independent animation faults, in order of severity:
+
+1. **Arbitrary source→host slot correspondence.** ~42 real clips, each at a slot number that
+   means something completely different.
+2. **21 slots aliased to one clip.** A third of the moveset is the same animation.
+3. The forced-`a1` overrides (fixed by not forcing).
+
+**The fix needs a deliberate mapping**, and building one needs a human to look at the Brute's
+clips and say what each is. `tools/slot_catalog.py` emits the MHFU half — every slot with the
+`(main,sub)` pairs that drive it and an empty `label` / `source_clip` column;
+`blender_mhfu/render_anim_clips.py` renders the MHP3rd half. Fill in `source_clip` and the
+porter has a real mapping table instead of `setdefault`.
+
+⚠️ The whole-rig clips are 31+9+5=45 tracks across streams 0/2/4, but MHFU also ships
+**partial clips** — slots 24/25 are stream-2-only, 9 tracks, head-and-neck over an idle body.
+A mapping table has to be per-stream, not per-slot, or those get filled with whole-rig data.
