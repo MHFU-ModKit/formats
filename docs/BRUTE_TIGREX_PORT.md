@@ -909,3 +909,37 @@ porter has a real mapping table instead of `setdefault`.
 ⚠️ The whole-rig clips are 31+9+5=45 tracks across streams 0/2/4, but MHFU also ships
 **partial clips** — slots 24/25 are stream-2-only, 9 tracks, head-and-neck over an idle body.
 A mapping table has to be per-stream, not per-slot, or those get filled with whole-rig data.
+
+---
+
+## 2026-08-27 — the hand-written anim labels, and exactly how far they carry
+
+`docs/brute_tigrex_anim_ids.txt` is 90 HITL labels made by injecting the Brute into a quest
+and stepping through animations with `anim play <slot> <action>`. `cli_bridge.lua` forces
+`g_force = a1` through `mhfu_on_bigmonster_action` and the CLI passes the number typed
+straight in, so **the ids are `a1`, which is the PAC animation slot index** (§34e).
+
+🔴 **That does not by itself make them labels of *source clip N*.** What the eye saw is
+whatever the INJECTED build had at slot N, and the builds on disk differ sharply:
+
+```
+  v66_slotfix     100 slots filled,  58 hold their own source clip
+  v67_hostslots    62 filled,        42 hold their own source clip, 20 a fallback
+  v65_slotfix     100 filled,         5
+  v69_headtail     62 filled,         7   (stream 0 is the HOST TIGREX's anims)
+```
+
+`tools/merge_labels.py` prints the per-slot verdict for any set of candidate builds instead
+of assuming one. Against v66 and v67 together: **42 of the labels land on a slot holding its
+own source clip under BOTH**, so those transfer regardless; a further 16 transfer only if the
+build was v66 — and they are exactly the 16 v67 drops (16, 22, 24, 25, 26, 27, 28, 29, 33,
+44, 50, 53, 55, 56, 63, 64).
+
+Which build was on screen is not recorded anywhere, so the merged CSV carries a
+`label_confidence` column rather than flattening the two cases.
+
+⚠️ Do **not** read these as the native Tigrex's action semantics. They describe the BRUTE's
+clips. Live measurement of the native Tigrex gives `a1` 54 = the roar `(0,4)` and `a1` 17 =
+the charge `(1,4)`; the hand labels for those ids say "jump forward part 1" and "idle chop on
+something standing", because at those slots the injected PAC held Brute geometry AND Brute
+animation. Both statements are true about different PACs.
