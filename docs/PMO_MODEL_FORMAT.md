@@ -113,6 +113,25 @@ any vgroup the mesh-table walk missed (file_06185: 370 → **4128 verts**, full
 model). Single-set monsters (mesh table already covers every vgroup) are
 unaffected; all 49 big-mon PACs still round-trip byte-identical.
 
+### 🟢 Per-vertex skinning ports LOSSLESSLY — measured, not assumed (2026-08-29)
+
+The long-standing "MHP3rd is blend-skinned, MHFU is rigid" framing was wrong on the
+second half, and it made the port look like a format gap that had to be bridged. It is
+not one. **Both games use the same per-vertex blend skinning and both are bound by the
+PSP GE's 8-bone-matrix limit.** Scanned across every skinned MHP3rd PAC (**2120** with a
+v102 PMO + a `0x80000000` skeleton): the largest `boneCount` on any vgroup anywhere is
+**exactly 8**, and **zero** vgroups exceed it — so `pmo_skin`'s `max_pal=8` cap can never
+fire on a source's authentic skin.
+
+`tools/skin_fidelity.py` closes it end to end: parse the source's v102 palette → run the
+porter's skinning stage → encode a native MHFU PMO → decode it with the independent
+reader → compare per vertex. **226 of 226** in-quest MHP3rd monsters keep every vertex's
+exact bone set with a **max weight error of 0.0** — not "within tolerance": MHP3rd stores
+weights as u8/128 and so does our encoder, so the re-quantisation is an identity.
+
+The remaining generalisation gap is NOT skinning — it is the anim **stream partition**
+(`docs/ANIMATION_FORMAT.md` "Stream partition").
+
 ### Skinning: small monsters RIGID, big monsters often SKINNED
 
 **0 of 62** em01 (small-monster) vertex groups set the VTYPE weight bits → **no

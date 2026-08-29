@@ -4,12 +4,33 @@ Branch `mhp3rd-monster-port`. Forward plan + research synthesis for **clean, gen
 monster porting**. Written 2026-06-24 after the Brute Tigrex port reached "renders + animates
 + textured + grounded + deals damage, but with residual skinning glitches."
 
-> **STATUS 2026-06-24: PHASE A DONE + IN-GAME CONFIRMED. Phases B & C DEFERRED** (user
-> decision — the same-family quality is sufficient for current needs). The clean v58 Brute
-> (native-Tigrex weight transfer) was verified live: throat/belly holes gone, spikes gone,
-> tail no longer cut. Resume B (no-reference / Zinogre-Arzuros-class) + C (interactive Blender
-> addon) here when a no-similar-native monster is wanted. The B/C sections below are the
-> ready-to-execute plan; nothing in them has started.
+> **STATUS 2026-08-29: PHASE A DONE (in-game). PHASE B's SKINNING IS DONE AND PROVEN
+> LOSSLESS — and it turned out not to be the blocker. PHASE C not started.**
+>
+> The premise this plan was written on ("MHP3rd blend-skins, MHFU is rigid, so a
+> no-reference port needs derived weights") is **half wrong**: MHFU's own big monsters are
+> blend-skinned too, both games share the PSP GE's 8-matrix limit, and a monster's
+> authentic per-vertex skin therefore transfers **exactly**. Measured, not argued —
+> `tools/skin_fidelity.py` round-trips **226 of 226** in-quest MHP3rd monsters with a max
+> weight error of **0.0**, and across all 2120 skinned MHP3rd PACs no vgroup exceeds 8
+> bones, so the palette cap can never drop an influence. There is no weight-derivation
+> problem to solve for a no-similar-native monster: ship the source rig
+> (`--source-skeleton`) and its own weights come with it (`--skin source`, auto-selected).
+>
+> **What actually blocked a no-similar-native port was the anim STREAM PARTITION**, one
+> level up from skinning — MHFU walks a rig in three streams that must each be one
+> complete subtree in contiguous index order, and MHP3rd rigs are not authored that way
+> (187 of 212 need reordering). Fixed by `skeleton.derive_stream_partition` +
+> `reorder_bones`, which reproduce the native Tigrex's `[31, 9, 5]` exactly. See
+> `docs/ANIMATION_FORMAT.md` "Stream partition".
+>
+> **Still open:** nothing in this plan has been cold-booted since the fix. A Zinogre port
+> (`file_05339`, 51 bones, split `[33, 6, 7]`) builds and passes every offline check in
+> `tools/verify_port.py` — including the ones the native `file_06185` passes — but has
+> never been loaded. That is the next step, and it is the only remaining unknown for the
+> Phase-B goal. Sections B/C below are kept as written; B's steps 1/3/4 are superseded by
+> the above, its steps 2/6/7 (bone map for a RETARGET port, bind-correction, host-slot
+> strategy) still stand, and C has not started.
 
 ---
 

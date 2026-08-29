@@ -567,6 +567,54 @@ the Blender addon (`blender_mhfu/exporter.export_ingame_bindpose_pac` + operator
 
 Full debugging arc + key addresses: `docs/BRUTE_TIGREX_PORT.md`.
 
+## 🔴 Stream partition — READ IT OFF THE BONE TREE (2026-08-29)
+
+Rule 2 above is stated as "match the HOST", which is what the retarget path does. A
+**source-skeleton** port ships its own rig and picks its own partition, and the rule
+that governs it is stricter than "any three numbers that sum right":
+
+> **Each stream is ONE COMPLETE SUBTREE, occupying a contiguous run of bone indices.**
+
+The native Tigrex `file_06185` is the proof, and it is not a coincidence of numbers:
+
+| stream | bones | subtree | what it is |
+|---|---|---|---|
+| 0 | 0–30 (31) | root + spine + forelimbs + both hind legs | the body |
+| 1 | 31–39 (9) | child of b3 (chest), reaching z **+687** | neck + head + jaw |
+| 2 | 40–44 (5) | child of b2 (hip), reaching z **−763** | the tail |
+| 3 | 45–47 | a second root chain | not animated |
+
+So the partition is the rig's own shape, and native rigs are *authored* body-first with
+the head and tail as the two TRAILING subtrees. That is the only reason the old
+`[animated − 14, 9, 5]` formula ever looked right.
+
+🔴 **An MHP3rd rig owes us none of that.** The Zinogre (`file_05339`, 51 bones) branches
+at b1 into a front half and a rear half, so its head sits at bones **18–23, in the middle
+of the index order**. Slicing off the last 14 bones puts a **hind leg** in the head stream
+and splits stream 1 into three disconnected fragments (roots 32, 38, 39). Counts still
+agree, so it loads and animates — it just drives the wrong limbs from the wrong clip.
+**187 of MHP3rd's 212 in-quest rigs need reordering**; the formula is right for 25.
+
+**The fix** (`skeleton.derive_stream_partition` + `reorder_bones`, wired into
+`port_p3rd`): find the subtree holding the most **−Z** bone (the tail) and the most
+**+Z** one (the head), then emit a permutation that moves them to the end. The whole
+rest of the port follows the same permutation — bone links are rebuilt from the parent
+array, the skin palette is remapped through it, and the anim `bone_map` is built from it.
+
+Two properties make this trustworthy rather than plausible:
+* On the **native Tigrex it returns `[31, 9, 5]` and the identity permutation** — it
+  rediscovers the shipped answer without being told it.
+* Across all 212 in-quest MHP3rd rigs: every parent still precedes its child, no stream
+  falls below 2 bones, and 210 give one complete subtree per stream (the 2 exceptions
+  are extra root chains landing in stream 0, which is legal — stream 0 is the remainder).
+
+⚠️ An appendage must be grown as a **whole subtree**, not from the extremity bone alone:
+seeding with `{leaf}` strands the leaf's own children in the body stream while the leaf
+moves to the end, putting a child ahead of its parent. That bit 13 of the 212 rigs.
+
+Audit any built PAC with `python tools/verify_port.py <pac> --model <src> --geo <geo>`;
+it passes on the native `file_06185`, which is what makes its checks worth anything.
+
 ## 🔴 The anim container header, fully decoded — 2026-08-24
 
 Every animation container in **both games** has the same header, and it is nothing

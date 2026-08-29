@@ -36,19 +36,26 @@ renders.** Skinning then resolved for a *static* pose (v30 flat→v31 bone-local
 **v32 model-space verts + nearest-bone = assembled**, after proving native verts are
 model-space + bind-inverse skinning).
 
-**The remaining wall is the ANIMATION, and the root cause is now definitive: the Brute
-mesh uses TRUE per-vertex BLEND skinning** — 58/88 vgroups are multi-bone (verts in one
-group weighted to *different* bones) and **30.9% of weights are fractional blends**.
-MHFU native monsters are **rigid, one-bone-per-group**. v32 forced every vertex to a
-single bone (slot 0) → assembles statically (at bind all bones are home) but **tears the
-moment bones animate** (a vertex that should blend several moving bones rigidly follows
-one → pieces separate → GE hang). The MHP3rd v102 PMO stores the bone NOT in vg[2]
-(all 0) but in per-vertex weights + a per-vgroup **bone-matrix palette** set by GE
-display-list bone commands. So the generalizable remaining fix = **port the per-vertex
-skinning** (preserve blend weights + emit each vgroup's bone-matrix palette, mapping
-source→MHFU bone via the matcher) OR **split multi-bone groups into per-bone rigid
-sub-groups** (native's approach — coarser, reuses the rigid path). The bone matcher is
-built and feeds either. Full arc + addresses below; detail in memory
+⚠️ **SUPERSEDED 2026-08-29 — the paragraph this replaces was wrong in its premise and
+its conclusion is DONE.** It read "the Brute mesh uses TRUE per-vertex BLEND skinning …
+MHFU native monsters are **rigid, one-bone-per-group**". The second half is false:
+MHFU's own big monsters are blend-skinned too — the native Tigrex `file_06185` carries
+per-vertex weights on all 214 vgroups, 1–8 bones each. There was never a format gap to
+bridge. Both games are bound by the same PSP GE **8-bone-matrix limit**, measured across
+every skinned MHP3rd model (2120 PACs): the worst vgroup anywhere uses exactly 8, so the
+encoder's palette cap can never drop an influence.
+
+**The per-vertex skinning is ported and proven lossless.** `pmo_p3rd.parse` decodes the
+v102 bone palette to each vertex's real `[(bone, weight)]`, `pmo_skin.from_source_influences`
+maps them onto the output rig and `pmo_skin.build` writes them in MHFU's native encoding.
+`tools/skin_fidelity.py` re-decodes the result with the independent reader and compares:
+**226 of 226** in-quest MHP3rd monsters keep every vertex's bone set with **zero** weight
+error (MHP3rd stores weights as u8/128, so our re-quantisation is exact, not merely
+within tolerance). What v32 got wrong was forcing one bone per vertex; that was fixed,
+not worked around.
+
+The wall that actually remained is one level up, in the **bone-stream partition** — see
+`docs/ANIMATION_FORMAT.md` "Stream partition". Detail in memory
 `brute-port-ingame-anim-encoder`.
 
 ## v22→v25: crash ladder to LOAD, then the mesh-collapse wall (2026-06-20)
@@ -272,7 +279,9 @@ DONE 2026-06-21 (static skinning solved; animation root cause pinned; matcher bu
 - ✅ **Bone matcher + anim bone_map + Blender export built** (commit c72db28, 70 tests):
   `tools/mhfu_model/bone_match.py` `match_skeletons()` (bind-position + tree-depth, cycle-guarded);
   `from_flat_anim(bone_map=)` / `swap_anim_to_realmotion(bone_map=)`; exporter `src_skeleton_pac`.
-- ✅ **Animation root cause = per-vertex BLEND skinning** (DEFINITIVE). Real-motion anim (v33/v34)
+- ✅ **Animation root cause = per-vertex BLEND skinning** (⚠️ half of this is retracted —
+  the "MHFU natives are rigid" premise is false and the port is now DONE + proven lossless;
+  see the SUPERSEDED note at the top). Real-motion anim (v33/v34)
   tears regardless of stream-id alignment; v36 (rotation-only) still tears but only single-bone
   groups (head/claws) move. Offline cross-ref: nearest-bone bound body groups to bones with
   mismatched motion (group53 146v→bone41 motion 259; group86 136v→bone43 motion 0). WHY: the
@@ -280,7 +289,7 @@ DONE 2026-06-21 (static skinning solved; animation root cause pinned; matcher bu
   skinning); v32 forced one-bone rigid → static-OK, animated-tear. MHP3rd v102 vg[2] is all-0
   (bone is in the per-vertex weights + a GE bone-matrix palette, NOT vg[2]).
 
-REMAINING (the animation — port the per-vertex skinning; generalizable, well-defined):
+REMAINING (⚠️ the per-vertex skinning is DONE — see the SUPERSEDED note at the top):
 1. **Option A (faithful):** parse each MHP3rd vgroup's bone-matrix PALETTE from its GE display list
    (run_ge currently captures weights but NOT the palette — add bone-matrix command handling),
    preserve the per-vertex blend weights, emit MHFU vgroups with the mapped palette (source bone →
