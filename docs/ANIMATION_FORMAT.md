@@ -200,6 +200,25 @@ The source `loop` flag is carried through verbatim (`Block(loop=anim.loop)`), so
 correct — the bug was purely the pad length. (Modders: `anim clips <pac>` lists every slot's real
 length + loop; pair with the live `anim sweep` for the a1→slot map.)
 
+**Clip SLOT MAPPING — the porter maps by INDEX, and that silently loses clips
+(2026-08-29).** `from_flat_anim` re-emits source clip *N* into host slot *N*. Two
+consequences no structural check catches, because the output is well-formed
+either way:
+
+* a source clip whose index is **not a populated slot in the host pack is
+  DROPPED** — the MHP3rd Zinogre (`file_05341`, 42 clips) lost slots 16, 22, 27,
+  33, 39, 63, 66 and 67 porting onto the Tigrex, because `file_06185` has no slot
+  there. 34 of 42 survive;
+* a host slot with **no** source clip of that index is filled with a **copy of the
+  source's slot 1** (its idle) — 30 of the Tigrex's 64 slots on that build. So a
+  third of the `a1` space plays idle, and "I forced a1 51 and he just stood there"
+  is a *successful* override onto filler, not a failed one.
+
+Everything that DOES land keeps its authored length and loop flag exactly (34/34
+verified byte-wise), and `a1` == the slot index 1:1 in game (16/16 clip runs over
+two cold boots). Audit any build with
+`tools/port_clip_probe.py --pac <built> --coverage <source moveset>`.
+
 **This closes animation export.** Full static pipeline now available:
 geometry (`pmo.py`) + skeleton & bind-pose (`skeleton.py`) + animation (`anim.py`) +
 implicit mesh↔bone mapping → everything Blender needs for rigged monster import/export.
