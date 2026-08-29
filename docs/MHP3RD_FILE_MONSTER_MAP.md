@@ -6,7 +6,32 @@ with the OLD v102 walker that over-expanded strips; the parser is now FIXED —
 `pmo_p3rd.run_ge_v102`, see `docs/PMO_MODEL_FORMAT.md` — so re-renders are clean.) Renders +
 texture atlases are in `tmp/mhp3rd_monster_renders/` (gitignored).
 
+## ⚠️ These files IDENTIFY THEMSELVES — the renders were never needed (2026-08-29)
+
+Every group opens with the species' AI overlay, and an `MWo3` header carries the
+overlay's **name** at file offset 32. `file_05337` says `em040m0.ovl`, so the group is
+em040 — an identification, not a guess. `tools/mhp3rd/em_groups.py` prints all 43 groups
+(146 asset sets) in a second and agrees with the visual work below on every row it
+overlaps: Zinogre = **em040** (`file_05339`), Brute Tigrex = **em058** (`file_05248`),
+Green Nargacuga = **em059** (`file_05297`), Akantor = **em060**, Ukanlos = **em061**.
+
+Two things the "5 consecutive files" rule below gets wrong, and both mis-assign files:
+
+- **The overlay count is 2 or 4.** `m0`/`m1` load at `0x09DB3D80`/`0x09DE8C00`; some
+  species also ship `m2`/`m3` at `0x09E1DA80`/`0x09E32500`. em010 has four.
+  (MHFU has ONE such slot, `0x09D1A180` — worth remembering when reasoning about how
+  many big monsters each engine was built to run.)
+- **A family shares one overlay and repeats the asset triple.** em001 spans
+  `file_05138..05145`: the overlays, then Rathian (`05140`) *and* Rathalos (`05143`).
+
+**`file_05342`/`file_05343` are NOT the Zinogre's.** They are `em041m0`/`em041m1` — the
+next monster's overlay pair, which is why they look like an unexplained identical-size
+couple sitting just past his moveset. The Zinogre's group is exactly `file_05337..05341`
+and contains **no effect/VFX file**; his effects are code in `em040m0.ovl`. See
+`docs/EFFECTS_AND_VFX.md`.
+
 ## In-quest big-monster layout (per monster, 5 consecutive files)
+⚠️ Superseded by the section above — true only for a single-variant, two-overlay species.
 `[overlay MWo3][overlay2][model+skel PAC][GE-geometry raw][moveset raw .anim]`
 - **model+skel PAC**: `pmo` + `0x80000000` skeleton (0x5C-stride compact) + `.TMH`
   textures (his real atlas). Geometry often in the adjacent GE-list companion file.
