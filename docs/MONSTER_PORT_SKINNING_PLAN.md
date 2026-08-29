@@ -24,13 +24,20 @@ monster porting**. Written 2026-06-24 after the Brute Tigrex port reached "rende
 > `reorder_bones`, which reproduce the native Tigrex's `[31, 9, 5]` exactly. See
 > `docs/ANIMATION_FORMAT.md` "Stream partition".
 >
-> **Still open:** nothing in this plan has been cold-booted since the fix. A Zinogre port
-> (`file_05339`, 51 bones, split `[33, 6, 7]`) builds and passes every offline check in
-> `tools/verify_port.py` — including the ones the native `file_06185` passes — but has
-> never been loaded. That is the next step, and it is the only remaining unknown for the
-> Phase-B goal. Sections B/C below are kept as written; B's steps 1/3/4 are superseded by
-> the above, its steps 2/6/7 (bone map for a RETARGET port, bind-correction, host-slot
-> strategy) still stand, and C has not started.
+> **🟢 PHASE B's GOAL IS MET IN-GAME (2026-08-29).** A **Zinogre** port (`file_05339`, 51 bones,
+> split `[33, 6, 7]`) — a monster with no similar MHFU native — builds, passes every offline check
+> in `tools/verify_port.py` including the ones the native `file_06185` passes, and **loads and
+> renders live**: the engine builds it from OUR reordered 52-bone skeleton (`entity+0x1A4` = 51 on
+> two cold boots), reads its anim table out of our sub3, and it stands on the ground in section 6,
+> textured and correctly sized, with no crash. Filmed.
+>
+> **Still open for the port as a whole** (not skinning, and not Phase B's premise): whether its
+> clips play correctly and whether it fights. Its behaviour pair has stayed `(1, 0)`, and every
+> close-up so far is of a monster we placed rather than one that engaged on its own.
+>
+> Sections B/C below are kept as written; B's steps 1/3/4 are superseded by the above, its steps
+> 2/6/7 (bone map for a RETARGET port, bind-correction, host-slot strategy) still stand, and C has
+> not started.
 
 ---
 
