@@ -615,6 +615,14 @@ moves to the end, putting a child ahead of its parent. That bit 13 of the 212 ri
 Audit any built PAC with `python tools/verify_port.py <pac> --model <src> --geo <geo>`;
 it passes on the native `file_06185`, which is what makes its checks worth anything.
 
+**It catches a defect that already shipped.** Run over the four Brute builds sitting on the
+memstick, the three RETARGET builds (v58, v64, v67 — host rig) pass, and
+`brute_tigrex_v63_clipfix.bin`, the one built through the **source-skeleton** path, fails with
+`stream 1 has 2 roots [35, 30]; stream 2 has 2 roots [39, 40]` — its head and tail streams are
+fragments, exactly as predicted. ⚠️ Do NOT read that as the cause of v63's zero-damage result:
+v58 measured 0 damage too and it passes, so the damage question is separate and still open. What
+this establishes is only that the partition defect was real in shipped data, not hypothetical.
+
 ## 🔴 The anim container header, fully decoded — 2026-08-24
 
 Every animation container in **both games** has the same header, and it is nothing

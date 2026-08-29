@@ -30,7 +30,7 @@ texture atlases are in `tmp/mhp3rd_monster_renders/` (gitignored).
 | file_05229 | file_05231 | Black Diablos | |
 | file_05253 | file_05255 | (an elder dragon) | large feathered/furred wings |
 | **file_05339** | **file_05341** | **ZINOGRE** | teal body, gold spikes + fur mane, wolf-shaped; 51 bones / 4180 verts / 181 vgroups. **The no-similar-native port target** — MHFU has no Fanged Wyvern. Stream split `[33, 6, 7]`, needs bone reordering. |
-| file_05354 | file_05356 | (a bear/Fanged Beast — Arzuros or Lagombi) | cream+brown quadruped, tusks, big claws; 31 bones / 2633 verts. Second no-similar-native candidate; species not pinned (colour in the silhouette render is unreliable — the material→atlas mapping there is ordinal). |
+| file_05354 | file_05356 | (a Fanged Beast — **Lagombi** most likely) | white/cream bear, broad flat head, big fore-claws; 31 bones / 2633 verts / 65 vgroups. Second no-similar-native candidate. Rendered with the correct texID→atlas mapping it is cream-white, not blue, which argues Lagombi over Arzuros — but the species is not pinned. |
 | file_05275 | file_05277 | Popo | mammoth, curved tusks — a SMALL monster (MHFU has it too) |
 | file_05282 | file_05284 | (Rhenoplos?) | small armoured quadruped, spiked head crest |
 | file_05297 | file_05299 | Green Nargacuga | |
