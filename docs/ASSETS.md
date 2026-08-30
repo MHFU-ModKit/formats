@@ -1,6 +1,6 @@
 # Regenerating the game-derived assets
 
-This repository ships **no game data and no game artwork**. Three categories of
+This repository ships **no game data and no game artwork**. Five categories of
 file are produced locally, gitignored, and never committed, because they are
 derived from Capcom-owned material that is not ours to redistribute:
 
@@ -10,6 +10,7 @@ derived from Capcom-owned material that is not ours to redistribute:
 | B — Disassembly listings | `tools/out/**/*.asm` | yes | `tools/eboot_dis.py` (static) or PPSSPP (live) |
 | C — Game-data tables | `tools/out/**/*.bin` | yes | the `tools/re_*.py` dumpers |
 | D — Ported monster PACs | `tmp/*.bin` | yes (**two** games) | `tools/build_p3rd_port.py --manifest ports/<name>.toml` |
+| E — Species action intel | `species/*.json` | yes | `tools/em_intel.py --all` |
 
 Everything here is reproducible from **your own** legally obtained copy of the
 game. Nothing in this repo requires, distributes, or links to game files.
@@ -241,12 +242,45 @@ extracts are absent.
 
 ---
 
+## Category E — species action intel (`species/*.json`)
+
+`species/emNN.json` is the host species' action table: every `(main, sub)` behaviour
+pair its overlay dispatches, the handler address behind each one, the executor `a1`
+animation ids it plays, what ENDS it (the clip, a cursor frame, or the `+0x414`
+budget), and the literal `spawn_effect(id, bone, frame)` arguments its handlers
+carry. All of that is **the game's own code and data, read out of `em*.ovl`** — the
+same category as the disassembly listings in B, just in JSON — so it is gitignored
+and never committed.
+
+```bash
+python tools/em_intel.py --all                      # all 17 -> species/em01.json ...
+python tools/em_intel.py file_06108.bin             # just the Tigrex -> species/em75.json
+```
+
+It reads `workspace/extracted/data_files/` (your MHFU dump) and nothing else — no
+emulator, no running game, ~4 s for all 17 overlays. The editor finds the result
+through `mhfu_monster_editor.intel.find_intel(host_species)`; without it the
+validator warns `INTEL_ABSENT` and keeps going, so a checkout that has never run the
+command still works.
+
+One field is **measured** rather than read: the per-pair dwell census from
+`tools/em_state_census.py`, which needs a cold boot with the observe-only probe
+deployed. Absent — which is the normal state — every pair's `measured` block is
+`null` and the file says why. Attach one with:
+
+```bash
+python tools/em_intel.py file_06108.bin --log <framework.log> --census-species 75
+```
+
+---
+
 ## Why these are excluded
 
 The wiki artwork is Capcom's, redistributed by the wiki under fan use; bundling
 it in a code repository is a different act from a fan wiki hosting it. The
-disassembly listings are the game's own code in disassembled form, and the
-tables are its data copied byte-for-byte. All three are trivially reproducible
+disassembly listings are the game's own code in disassembled form, the species
+intel is that same code read into JSON, and the tables are its data copied
+byte-for-byte. All of them are trivially reproducible
 by anyone who owns the game, so excluding them costs contributors a single
 command and keeps this repository free of material we have no right to ship.
 
