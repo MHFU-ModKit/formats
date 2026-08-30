@@ -608,6 +608,42 @@ So the partition is the rig's own shape, and native rigs are *authored* body-fir
 the head and tail as the two TRAILING subtrees. That is the only reason the old
 `[animated − 14, 9, 5]` formula ever looked right.
 
+### ⚠️ A clip that lives in ONE stream still belongs to that stream's joints (2026-08-31)
+
+The partition is also the **playback** rule, and reading it back is where it bites.
+`anim_ingame.to_flat_anim` concatenates the populated streams in stream order, and for a
+whole-rig clip that concatenation *is* joint order — track *i* drives joint *i*. But not
+every slot is whole-rig: on **every Tigrex-framed pack seen so far — the native
+`file_06185`, `zinogre_v10.bin` and the built Brute — slots 24 and 25 exist in the
+SECOND POPULATED stream only**. They are a 9-track head-and-neck clip meant to play
+over an idle body.
+
+⚠️ Mind which numbering you are reading. The container holds **six** stream tables and
+the three populated ones sit at *physical* indices **0 / 2 / 4** — hence
+`to_flat_anim(streams=(0, 2, 4))`. So "the second populated stream" is `ig.streams[2]`,
+and the joint bases below are indexed over the populated streams, not over all six.
+
+Flattened, those 9 tracks come back as tracks 0–8 with nothing in front of them, so
+anything that assumes "track *i* == joint *i*" drives the **root, the spine and a
+foreleg** with the neck's curves and folds the monster in half. The joint base of stream
+*k* is the total width of the populated streams before it (31 / 9 / 5 → bases 0 / 31 /
+40), which is derivable from the file: a stream's block carries the same bone count on
+every clip it holds. `mhfu_monster_editor.core.scene.stream_joint_bases` does exactly
+that, and `Scene.clip(24).track_to_joint` maps 0–8 → 31–39.
+
+Measured on the native `file_06185`, slot 24 at frame 180:
+
+| read | joints that move | worst displacement |
+|---|---|---|
+| positionally (wrong) | **3–14** — spine, both forelegs | 337 u |
+| at the stream base (right) | **32–39** — the head/neck chain | 134 u |
+
+⚠️ `mhfu_model.stretch.sample` is positional and does not know this — it is the FK
+oracle, not a clip loader — so `tools/port_stretch.py --all` mis-poses slots 24 and 25.
+It has not changed a verdict (the native Tigrex still measures a **0 u** cross-fork
+tear with them in), but do not read a tear number reported for those two slots as
+meaning anything.
+
 🔴 **An MHP3rd rig owes us none of that.** The Zinogre (`file_05339`, 51 bones) branches
 at b1 into a front half and a rear half, so its head sits at bones **18–23, in the middle
 of the index order**. Slicing off the last 14 bones puts a **hind leg** in the head stream
