@@ -9,6 +9,7 @@ derived from Capcom-owned material that is not ours to redistribute:
 | A — HUD artwork | `mhfu_hud/assets/` | no | `mhfu_hud/tools/fetch_assets.py` |
 | B — Disassembly listings | `tools/out/**/*.asm` | yes | `tools/eboot_dis.py` (static) or PPSSPP (live) |
 | C — Game-data tables | `tools/out/**/*.bin` | yes | the `tools/re_*.py` dumpers |
+| D — Ported monster PACs | `tmp/*.bin` | yes (**two** games) | `tools/build_p3rd_port.py --manifest ports/<name>.toml` |
 
 Everything here is reproducible from **your own** legally obtained copy of the
 game. Nothing in this repo requires, distributes, or links to game files.
@@ -215,6 +216,28 @@ Both scripts write into `tools/out/<name>/` and also emit `.txt` / `.json`
 companions. **Only the `.bin` and `.asm` outputs are gitignored** — the textual
 analysis logs in `tools/out/` are our own notes and remain tracked, so you can
 read the conclusions without regenerating anything.
+
+---
+
+## Category D — ported monster PACs (`tmp/*.bin`)
+
+A ported monster is an MHFU big-monster PAC spliced from **two** games' data — an
+MHP3rd donor (model, skeleton, textures, moveset) onto an MHFU host frame. Every
+byte of it is Capcom's, so no built PAC is committed, and `tmp/` is gitignored.
+
+What *is* committed is the recipe: one `port.toml` per port under `ports/`,
+hand-authored file ids and numbers, read by `mhfu_monster_editor.manifest`.
+
+```bash
+python tools/build_p3rd_port.py --manifest ports/zinogre.toml     --out tmp/zinogre_v10.bin
+python tools/build_p3rd_port.py --manifest ports/brute_tigrex.toml --out tmp/brute_tigrex_em058.bin
+```
+
+Both need `workspace/extracted/` (your MHFU dump) and `workspace/extracted_mhp3/`
+(your MHP3rd dump), produced by `tools/extract_iso.py`. The manifest build is
+byte-identical to the documented flag soup it replaces — pinned by
+`mhfu_monster_editor/tests/test_ports_build.py`, which returns early when the
+extracts are absent.
 
 ---
 
