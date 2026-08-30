@@ -767,6 +767,34 @@ list plus **46–50, the severed-tail chain**, which the native Tigrex also leav
 (its own is 45–47). Offset 1 instead leaves bone 0 — the actual root — undriven and
 drives bone 46, the severed tail's root.
 
+### The Brute Tigrex (em058) is the SECOND monster the rule solved, the same way
+
+He is not in `skipped_bones.md` at all, so `p3rd_anim_map` had no row for him and he
+silently took `DEFAULT_BONE_OFFSET` (2) for months.
+
+```
+em058: fork = bone 1 (children 2, 29, 34, 39)
+  offset 0 -> loc records on bones 0, 1   ✅ at and above the fork
+  offset 1 -> loc records on bones 1, 2   ❌ bone 2 is the FRONT branch only
+  offset 2 -> loc records on bones 2, 3   ❌ what he was actually built and rendered at
+```
+
+The same two corroborations land: his 43 records at offset 0 consume bones **0–42
+exactly** — every real body bone — and what is left undriven is **43/44/45, a second
+orphan ROOT chain** whose shape (a +327 step, then −186 segments) matches em040's
+severed-tail carve object at 46–50. Only 2 mesh groups are dominated by it.
+
+**🔴 How to get the em id: read it out of the data.** The two files immediately BEFORE a
+monster's model pac are its AI overlays, and an `MWo3` header carries the name at offset
+32 — `file_05246` says `em058m0.ovl` outright. Guessing from monster order is how this
+stayed unmapped.
+
+⚠️ **A skinning GUESS hides a bone-mapping bug.** The Brute's wrong offset was invisible
+for as long as `render_anim_clips.py` re-skinned with `auto_skin`: a blended
+nearest-bone guess smears a wrong map into something plausible. It only became visible
+once the renderer used the PMO's own palette. Do not read "the render looks fine" as
+"the map is right" unless the skin is authentic.
+
 The native MHFU Tigrex obeys the same rule. Its own flat clips, 64 clips, 45 tracks:
 
 | track | bone | parent | bind | channels | keys |
