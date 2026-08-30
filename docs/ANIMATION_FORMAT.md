@@ -9,7 +9,8 @@ static analysis alone:
   validated on Tigrex + 66 monsters) — see "✅ SKELETON + BIND-POSE SOLVED".
 - **Animation keyframes** → `tools/anim.py` (PAC sub-3, P3rd-style pack;
   validated on Tigrex, 22 anims) — see "✅ KEYFRAME STREAM SOLVED".
-- **Mesh↔bone binding** → implicit positional (`docs/PMO_MODEL_FORMAT.md`).
+- **Mesh↔bone binding** → the PMO's own **bone palette**, both games — NOT positional
+  (`docs/PMO_MODEL_FORMAT.md`; `pmo._attach_influences` / `pmo_p3rd.parse`).
 - **Interpolation** → cubic `spline()` with ease-in/out tangents.
 
 The engine classes (`Joint`/`Hierarchy`, `Joint::update`, builders) are named + laid out
@@ -521,7 +522,7 @@ Hypothesis: AHI = Animation/Hitbox Information
 |-------|-------|-------|
 | Skeleton / bone hierarchy | **SOLVED** | big-mon PAC sub-resource 0, `0xC0000000` blob — `tools/skeleton.py` |
 | Bind-pose (per-bone scale/rot/pos + tree) | **SOLVED** | same blob (bone section `+0x1C/2C/3C`) |
-| Mesh↔bone binding | **SOLVED** | implicit positional (see `docs/PMO_MODEL_FORMAT.md`) |
+| Mesh↔bone binding | **SOLVED** | the vgroup **bone palette**, both games — draw order is only a fallback for palette-less PMOs (see `docs/PMO_MODEL_FORMAT.md`) |
 | Runtime skeleton classes + FK | **SOLVED** | `Joint`/`Hierarchy`, `Joint::update`, builder `0x088dc40c` (above) |
 | Keyframe interpolation method | **KNOWN** | cubic `spline()` w/ ease tangents (decomp `model_base.cpp`) |
 | Keyframe stream encoding | **SOLVED** | big-mon PAC **sub-resource 3** — `tools/anim.py` (see "✅ KEYFRAME STREAM SOLVED") |
@@ -712,3 +713,149 @@ set 0 is shifted by one. `parse_p3rd(blob, stream=0)` is the monster's main move
 - Keyframe shape (sibling engine): `Kurogami2134/blender_p3rd_anim`
 - Engine source (decompiled): `tools/mhfu_external/mhp2g-decomp` (`joint.cpp`, `model_base.cpp`)
 - Disasm harness: `tools/eboot_dis.py`; skeleton parser: `tools/skeleton.py`
+
+## 🔴 MHP3rd anim records are NOT positional — record → bone needs an OFFSET + SKIP LIST (2026-08-30)
+
+**This invalidated every cross-game animation this repo had produced**, and it was
+assumed rather than checked for months: both `mhfu_model/port_p3rd.py` and
+`blender_mhfu/fk_bake.py` did `for i, track in enumerate(anim.tracks)` and bound track
+*i* to bone *i*. MHFU works that way. **MHP3rd does not.**
+
+`Kurogami2134/blender_p3rd_anim`'s `import_p3a.py` is explicit:
+
+```python
+for bone in range(bone_count):
+    while bone + skipped_bones in missing_bones:
+        skipped_bones += 1
+    do_bone_anim(file, armature.pose.bones[bone + bone_offset + skipped_bones], ...)
+```
+
+> **skeleton_bone = record_index + bone_offset + skipped_so_far**
+
+Walk the skeleton from `bone_offset`, stepping OVER a per-monster list of bones the
+moveset never drives. That repo ships the lists in `skipped_bones.md`; they are
+mirrored in `tools/mhfu_model/p3rd_anim_map.py:SKIPPED_BONES`.
+
+**What it cost.** The Zinogre (em040) has a 51-bone rig and 37 records. Positionally
+that covers bones 0–36, so the **whole tail (39–45)** and part of the jaw got no data,
+froze at bind pose while the body animated, and the skin spanning the boundary
+stretched — visible in-game as a rubber-band at the severable tail segment, plus a
+mis-posed head and a frozen fore-claw. Mapped correctly the *same 37 records* cover
+bones **1–46, tail included**. No data was ever missing.
+
+**⚠️ The offset is per-monster and `skipped_bones.md` does not give it** (the addon
+defaults to 2). The test that decides it is **structural, and it is the FORK RULE**:
+
+> **Every record carrying LOCATION channels must land on a joint at or ABOVE the body
+> fork** — the first joint with more than one child, where the rig splits front from
+> rear.
+
+A location channel translates its joint's whole subtree. Land one BELOW the fork and it
+lifts one half of the animal and not the other, leaving the waist geometry to span the
+gap. `mhfu_model.p3rd_anim_map.body_fork()` / `loc_below_fork()` compute it.
+
+```
+em040: fork = bone 1 (children 2 = chest/neck/head/forelegs, 25 = hind legs/tail)
+  offset 0 -> loc records on bones 0, 1   ✅ at and above the fork
+  offset 1 -> loc records on bones 1, 2   ❌ bone 2 is the FRONT branch only
+  offset 2 -> loc records on bones 2, 3   ❌ worse
+```
+
+Two corroborations for **offset 0** on em040: the 37 records then consume the 37 real
+body bones exactly, ending on bone 45 (the tail tip); and what is left over is the skip
+list plus **46–50, the severed-tail chain**, which the native Tigrex also leaves undriven
+(its own is 45–47). Offset 1 instead leaves bone 0 — the actual root — undriven and
+drives bone 46, the severed tail's root.
+
+The native MHFU Tigrex obeys the same rule. Its own flat clips, 64 clips, 45 tracks:
+
+| track | bone | parent | bind | channels | keys |
+|---|---|---|---|---|---|
+| 0 | 0 | −1 | (0,0,0) | rot only | 76 |
+| 1 | 1 | 0 | (0,0,0) | **loc** + rot | 526 |
+| 2 | 2 | 1 | (0,0,0) | **loc** + rot | 4493 |
+| 3 | 3 | 2 | (0,0,50.5) | rot | 3328 |
+
+Its fork is bone **2** (children 3, 21, 26, 40), and its loc channels sit on 1 and 2 —
+at and above it. ⚠️ Note track index == bone index: **MHFU's own clips ARE positional.**
+Only the MHP3rd source needs the map.
+
+### ⛔ RETRACTED: two arguments that pointed at offset 1, and both were wrong
+
+Recorded because each looks convincing and cost a day.
+
+1. **"Native carries loc on bones 1 and 2, so the port should too."** Comparing INDEX
+   positions instead of TREE positions. It is only the same statement when the fork is
+   in the same place, and it is not: native forks at 2, the Zinogre at 1.
+2. **LEFT/RIGHT symmetry (`score_offsets`) scored offset 1 at 0.7615 against 0.6424 at
+   2 and 0.4231 positional.** The score cannot pick an offset *at all*: a mirrored pair
+   stays a mirrored pair under any whole-rig shift, so it only rejects mappings that
+   break the pairing — like a positional read against a skip list. Use it to sanity-check
+   the **skip list**; use the fork rule for the **offset**.
+
+**What offset 1 looked like:** structurally flawless — 9/9 in `verify_port`, correct
+clip coverage, correct rest floor — and visibly broken. It hoisted the front half of the
+animal ~230 units, so he reared permanently and the skin from shoulders to tail base
+became one long flat sheet. In game that reads as an "L-shaped back"; it is a mapping
+fault, not a rigging or skinning one.
+
+🟢 **Also fixes the animated count.** The driven range ends at bone 46, so
+`animated = 47` — derived, not guessed. Do NOT set it to the full bone count: see
+`agent_memory_map.md` "Bone-count rule" (partition == FK walk hangs the joint builder).
+
+✅ **`blender_mhfu/fk_bake.py` takes the map now** (`sample(anim, bone_of_record=…)`, wired
+from `render_anim_clips.py` via `p3rd_anim_map.em_for_model_pac`). Renders made before
+2026-08-30 — including `tmp/*_moveset/*.mp4` — show the OLD wrong pose; re-render before
+trusting one. `MHFU_CLIP_POSITIONAL=1` reproduces the old behaviour for comparison.
+Leave `bone_of_record=None` for a BUILT MHFU PAC: those clips are positional.
+
+### 🟢 A rig's SECOND root chain is the SEVERED TAIL (2026-08-30)
+
+A bone whose `parent` is **−1 while not being bone 0** roots an independent chain the
+animation never reaches, and it carries real geometry:
+
+| rig | orphan chain | verts | |
+|---|---|---|---|
+| MHP3rd Zinogre `file_05339` | 46 → 47, 48 → 49 → 50 | 165 (4.0%) | tapering, −120 z per link |
+| native MHFU Tigrex `file_06185` | 45 → 46 → 47 | 150 (3.6%) | same shape |
+
+**It is the carvable object the game drops when the tail is cut.** Both monsters have a
+cuttable tail; both carry one; the chain steps −120 z per link exactly like the live tail
+chain does (Zinogre bones 39→40→41→43→44→45). It is authored on its own root because once
+severed it lies in world space, not on the animal — which is also why it is unanimated,
+why nothing else parents to it, and why hiding it leaves no hole in the model.
+
+🔴 **Do not drop it and do not re-weight it onto the body.** Dropping removes a gameplay
+object; re-weighting tore one contiguous 165-vertex object across the head, spine, hip,
+tail and legs (see the `monster-porting` skill).
+
+🟢 **The engine does NOT draw it before the tail is cut** (confirmed in game 2026-08-30:
+a ported Zinogre whose severed tail sits at flank height shows nothing protruding). So its
+DATUM does not matter during normal play, even though an MHP3rd rig's origin is at the hip
+(~435 units up) while a native rig's is on the ground. It will matter the day a ported
+tail is actually severed — a separate job.
+
+⚠️ Our offline renderers draw every vgroup unconditionally, so they DO show it. Highlight
+the orphan chain (`render_port_views.py`, `MHFU_VIEW_HILITE`) before judging a port, or it
+reads as a deformation bug in the body.
+
+### External references (saved 2026-08-30)
+
+| Resource | Covers |
+|---|---|
+| `Monkbreh/MHFU-Texture-Port` | higher-res texture port for MHFU |
+| `m2jean/mhfu-ios-pmo-plugin` | MHFU **iOS** PMO + skeleton (already used here) |
+| `AsteriskAmpersand/PMO-Importer` | PMO parsing reference (already used here) |
+| `Kurogami2134/pmo_export` | PMO **export** |
+| `Kurogami2134/MHP3rd-Game-FIle-List` `guide/guide.md` | P3rd modding guide — where "bone offset" / "bones to skip" are documented |
+| `Kurogami2134/blender_p3rd_anim` | **the record→bone mapping above**, plus `skipped_bones.md` |
+
+### 🟢 Capcom shipped their own cross-game ports INTO this engine
+
+MHFU carries three monsters brought over from **Monster Hunter Frontier**:
+**Hypnocatrice**, **Lavasioth** and **Queen Vespoid**. Hypnocatrice is a restructure of
+the Yian Kut-Ku and Lavasioth of the Plesioth — i.e. Capcom used the **retarget-onto-an
+-existing-rig** path — while **Queen Vespoid is an entirely new structure**, the
+analogue of our source-skeleton path. Their PACs are therefore *native controls for what
+a correct port looks like in MHFU's own format*, beyond the Tigrex.
+**Open:** their `em` ids / file numbers are not yet identified here.

@@ -359,7 +359,10 @@ final_position = raw_position / scale_divisor
    `Hierarchy` (≤4 root chains, keyframes via `motion_table`). The format is no longer
    unknown; the open work is dumping the populated *values* for a given monster (read
    the live `Hierarchy`, or trace the overlay `motion_table` writer). The *binding*
-   (which bone each mesh attaches to) is solved — implicit positional, see "Skinning".
+   (which bone each mesh attaches to) is solved — the vgroup **bone palette**, see
+   "Skinning". ⚠️ "implicit positional" (draw order == bind index) is the FALLBACK for
+   PMOs with no palette, and reading it as the rule is what welded 166 of file_06185's
+   214 groups onto one bone in the Blender importer for two months.
 2. **No animation data in the PMO** - keyframes stored separately
    (see `docs/ANIMATION_FORMAT.md`).
 3. **Geometry import works** - `pmo.py` converts monster PMOs (both model parts) to
