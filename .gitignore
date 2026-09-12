@@ -1,0 +1,16 @@
+# Python
+venv/
+__pycache__/
+*.pyc
+
+# Game files are never committed — your own dump lives here
+workspace/
+
+# External libraries cloned by tools/setup.sh (have their own repositories)
+tools/mhff/
+tools/mhef/
+
+# Dumps and listings produced by the tools from your own game data
+tools/out/
+
+.DS_Store
