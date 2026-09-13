@@ -81,10 +81,35 @@ parse. The monster layout is:
 | Vertex-group start index | u16 @ mesh+0x12 | index into the vgroup table |
 | Vertex-group record | 16 bytes, `2BH3I` | same as legacy |
 | GE list address | `header[12] + vg[3]` | run the GE display list here |
-| Material index | `vg[0]` → `material_table[vg[0]]` | (geometry verified; texture mapping unverified) |
+| Material index | 🔴 **`material_table[material_remaps[vgroup_index]]`** — NOT `vg[0]` | verified 2026-09-13 on all 487 stage PMOs, see below |
 
 `pmo.py` now auto-detects this via `convert_mhfu_monster_meshes()` (it validates
 all offsets before emitting, so it is a no-op on non-monster files).
+
+### 🟢 The material remap table — `header[9]` (`material_remaps_offset`), 2026-09-13
+
+The decomp named the field and nobody read it. For the 0x18-stride layout a vertex
+group's material is **not** `material_table[vg[0]]`: `vg[0]` is the group's ordinal
+within its mesh (0, 1, 2 … always) and the real binding is a **u8 per vgroup** starting
+at `header[9]` — the bytes between the end of the vgroup table and the material table,
+zero-padded up to `material_data_offset`:
+
+```
+material_index(vgroup i) = u8[ header[9] + i ]        // < header[6], the material count
+```
+
+Verified on **all 487 stage PMOs** (every entry below `header[6]`, padding all zero):
+only **78** are the identity map the old lookup assumed. st002's terrain has 27 groups
+over 25 materials with its 14th group sharing material 3; st004 has equal counts and
+is a permutation (`3 0 4 5 6 1 …`). So the old rule drew 409 stage PMOs with at least
+one group in the wrong texture, and `stage_tool.py`'s accumulating walk (`base +=
+max(vg[0]) + 1` per mesh, "right on 104 of 517") was a coincidence on 78 of those 104
+and a permutation on the other 26. `mhfu_model.pmo._walk` (0x18 stride) and
+`stage_tool._material_of_group` now read the table; `mhfu_map_editor.core` too.
+Small-monster PMOs (0x18 stride, e.g. `file_06070`) carry the same table with the same
+shape (62 groups over 34 materials, entries in range) — not yet checked against a render.
+⚠️ The 0x20-stride big-monster layout carries `mat_base` in the mesh record instead and
+the bytes at `header[9]` there are something else (values exceed the material count).
 Verified: em01 = 19592 verts / 31 groups, em02 = 17037 verts / 23 groups,
 em01 secondary PMO = 682 verts / 7 groups — all clean.
 
