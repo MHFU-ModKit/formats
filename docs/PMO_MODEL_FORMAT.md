@@ -218,7 +218,14 @@ terrain-registered) → it sinks; see `docs/agent_memory_map.md` `+0x200`.
 `mhfu_model/tmh.py::decode_tmh(raw)` decodes the TMH sub (PAC sub 2) to RGBA8 with
 **no PIL dependency** (ported from `mhff/psp/tmh.py`; modes 0–8 + CLUT, BGRA→RGBA
 swap; DXT3/5 modes 9/10 skipped). Byte-exact vs the PIL reference on all of
-`file_06185`'s 5 textures. The Blender importer turns each into a packed image +
+`file_06185`'s 5 textures.
+
+🟢 **It writes as well as reads** (2026-09-13): `parse_tmh` (structural), `quantize` and
+`encode_into` replace an image in place at exactly its original size. The oracle is a
+re-encode of every shipped image against its own palette — **1 383/1 383 monster images
+and 4 718/4 718 stage images pixel-identical**. The container spec was rewritten against
+it, because the older one had the image header, the pixel header, the CLUT entry format
+and the swizzle block size all wrong → `docs/TMH_TEXTURE_FORMAT.md`. The Blender importer turns each into a packed image +
 Principled material, **explicitly UV-mapped** (a `ShaderNodeUVMap` → the texture's
 `Vector` input; without it the texture falls back to generated coords and smears).
 

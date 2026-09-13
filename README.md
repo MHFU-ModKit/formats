@@ -10,7 +10,9 @@ out of your own copy of the game, and the MHP3rd→MHFU monster porter.
 - **`tools/mhfu_model/`** — PMO models, PAC archives, skeletons, animations (both the on-disk and
   the in-game recursive form), TMH textures. Parses and re-encodes **byte-identically** on all 49
   big-monster PACs; a constraint validator knows the engine's rules; encoders for skeleton,
-  animation and geometry edits; a topology-grow encoder that adds vertices and faces.
+  animation, geometry and **texture** edits; a topology-grow encoder that adds vertices and
+  faces. The TMH codec round-trips **every texture in the game** — 10 025 images across
+  4 294 banks — which is what lets an image be replaced in a bank at exactly its own size.
 - **`tools/extract_iso.py`** — dumps and decrypts `DATA.BIN` from your ISO (via `mhef`/`mhff`).
 - **The porter** — `build_p3rd_port.py` and friends: MHP3rd geometry, textures, skeleton and
   full moveset onto an MHFU-loadable PAC, with `verify_port.py` / `port_anim_verify.py`
