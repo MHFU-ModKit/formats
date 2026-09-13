@@ -243,7 +243,8 @@ It is **not stored in the PMO PAC**:
   PAC (em01 = `file_06060`). **But BIG-monster PACs DO** — see next note.
 
 > **Correction (2026-06-13): big monsters carry a real skeleton.** The proper monster
-> model PAC is `file_0{em_id+0x17AB}.bin` (em01 = `file_06060`; the `file_06043` scanned
+> model PAC is `file_0{em_id+0x17AB}.bin` (⚠️ that FORMULA is wrong — it is `+6110`, see
+> "Monster Model Locations" below; the rest of this note stands) (em01 = `file_06060`; the `file_06043` scanned
 > earlier was a different/secondary asset PAC). **Big-monster PACs** (`file_06111`–
 > `file_06159`, the ones with `em*.ovl` overlays) have a `0xC0000000` **skeleton + bind-
 > pose blob as sub-resource 0** — `{[0]=skeleton, [1]=PMO, [2]=TMH, [3]=animation}`.
@@ -374,11 +375,29 @@ final_position = raw_position / scale_divisor
    `[GE list .. RET] + [vertex buffer] + [index buffer]`, 16-byte aligned). It re-lays
    the region, patches each list's `VADDR`/`IADDR` args + each vgroup record's
    `I3=geoff/I4=vbuf/I5=ibuf` (geBase-relative), and bumps `header[0]`; tables before
-   `geBase` stay byte-identical. Grows within an existing vgroup (8-bit-index 256-vert/
-   group cap; a NEW vgroup has undefined bone binding). PROVEN live in-game: added
-   geometry renders (the engine's decode is data-driven). New verts currently inherit
-   vertex0's UV/normal/weights (polish TODO). Delivered live via the `framework/prx`
-   relocate-source path (`mhfu.inject_relocate`) — see CLAUDE.md Phase 5.
+   `geBase` stay byte-identical. Grows within an existing vgroup (8-bit indices auto-
+   promote to 16-bit past 256 verts; a NEW vgroup has undefined bone binding **on a
+   monster** — not on a stage, which carries no weights). PROVEN live in-game: added
+   geometry renders (the engine's decode is data-driven). `grow_group_explicit` writes
+   real per-vertex position/UV/normal/weights, and `src_indices` picks which existing
+   vertex each new one inherits its remaining fields — above all **colour** — from.
+   Delivered live via the `framework/prx` relocate-source path (`mhfu.inject_relocate`)
+   — see CLAUDE.md Phase 5.
+
+   **It works on STAGE PMOs unchanged** (2026-09-13) — `stage_tool.py regeom`, see
+   `docs/STAGE_MAP_FORMAT.md` §4b. Getting there needed two fixes, both invisible until
+   a stage went through:
+
+   - `serialize` dropped the **EOF pad**. Retail pads the `geBase` region to 16 and
+     counts the pad in `header[0]`; output was 2–14 bytes short. With it, parse →
+     serialize is **byte-identical on 475/475 stage PMOs and 89/89 monster PMOs** —
+     `roundtrip_region`'s docstring used to assert the opposite ("NOT byte-identical:
+     layout is rebuilt"). The re-layout reproduces retail's exactly. Any diff is a bug.
+   - `pmo.run_ge` mis-wound **triangle lists**: it applied the strip's alternating
+     rule `(i + face_order) % 2` to prim type 3, mirroring every other triangle. All
+     479 tri-list PRIMs in the stage corpus are a **single** triangle (so `i` is always
+     0 and retail never showed it); the grow path emits multi-triangle lists and tripped
+     it immediately. For a list the swap depends on `face_order` alone.
 
 ## Blender / Noesis Import (tooling, 2026-06-13)
 
@@ -447,8 +466,12 @@ extract_package('file_06060.bin')
 
 ### Overlay Files Also Contain Models
 
-**Monster model PAC = `file_0{em_id+0x17AB}.bin`** (the DATA.BIN extract index equals
-the file_id). Two layouts:
+**Monster model PAC = extracted `file_0{em_id+6110}.bin`** — Tigrex em75 = `file_06185`.
+The engine asks for `em_id + 6111`, one higher, because `extract_iso.py` reads the TOC
+from DATA.BIN offset 4. ⚠️ The `em_id + 0x17AB` written elsewhere in this file and in
+`ANIMATION_FORMAT.md` / `MODDING_ROADMAP.md` / `QUEST_RUNTIME_LAYOUT.md` is **wrong** —
+it resolves Tigrex to `file_06134`, a 25-bone model. → `docs/agent_memory_map.md`.
+Two layouts:
 - **Big monsters** (those with an `em*.ovl` overlay; `file_06111`–`file_06159`):
   `[0]=skeleton (0xC0000000)`, `[1]=PMO`, `[2]=TMH`, `[3]=animation (0x64…)`.
 - **Small monsters** (e.g. em01/Popo = `file_06060`): `[0]=PMO`, `[1]=TMH`, `[2]=PMO2`,
