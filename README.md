@@ -4,6 +4,8 @@
 
 # MHFU ModKit — formats
 
+> **Archived.** This code now lives in [MHFU-ModKit/modkit](https://github.com/MHFU-ModKit/modkit), at [`packages/mhp-formats`](https://github.com/MHFU-ModKit/modkit/tree/main/packages/mhp-formats) (the formats) and [`packages/mhfu-port`](https://github.com/MHFU-ModKit/modkit/tree/main/packages/mhfu-port) (the porter). Open issues and pull requests there.
+
 The Monster Hunter Freedom Unite file formats as a Python library, the tools that get the files
 out of your own copy of the game, and the MHP3rd→MHFU monster porter.
 
